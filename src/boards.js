@@ -188,7 +188,7 @@ export function boardArt(design) {
   const b = base.getContext('2d');
   b.drawImage(top, 0, 0);
   b.fillStyle = 'rgba(0,0,0,0.25)'; b.fillRect(0, 0, TEX_W, TEX_H);
-  b.font = '900 118px "Bungee", "Impact", sans-serif';
+  b.font = 'italic 150px "Anton", "Impact", sans-serif';
   b.textAlign = 'center'; b.textBaseline = 'middle';
   b.lineWidth = 10; b.strokeStyle = 'rgba(0,0,0,0.55)';
   b.strokeText('SNOWDAY', TEX_W / 2, TEX_H / 2 + 6);
@@ -261,32 +261,67 @@ export function drawBoardPreview(canvas, design, face = 'top') {
 }
 
 // ---------- mesh ----------
+// The board is built as a real deck: a cambered core that thins toward the tips,
+// spoon-shaped nose and tail, glossy topsheet, sintered base, sidewalls and steel
+// edges. Board origin = middle of the base, so it sits exactly on snow or a rail.
 
-function capGeometry(y, flip) {
-  const pts = outline();
-  const shape = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(z, x)));
-  const g = new THREE.ShapeGeometry(shape, 6);
-  const p = g.attributes.position;
-  const uv = g.attributes.uv;
-  for (let i = 0; i < p.count; i++) {
-    const sz = p.getX(i), sx = p.getY(i);
-    p.setXYZ(i, sx, y + kick(sz), sz);
-    uv.setXY(i, (sz + BOARD_LEN / 2) / BOARD_LEN, (sx + HALF_END) / (HALF_END * 2));
+const SEG_Z = 96, SEG_X = 10;
+const CAMBER = 0.006; // 6 mm of camber between the feet
+const EDGE_H = 0.0022;
+
+// Height of the base above the contact line along the board (camber + kick).
+function baseHeight(z) {
+  const eff = BOARD_LEN / 2 - NOSE_LEN - 0.09;
+  const az = Math.abs(z);
+  const camber = az < eff ? CAMBER * Math.cos((az / eff) * Math.PI / 2) : 0;
+  return camber + kick(z) * 1.25;
+}
+// Core thickness: ~11 mm under the feet, ~4 mm at the tips.
+function thickness(z) {
+  const t = Math.min(1, Math.abs(z) / (BOARD_LEN / 2));
+  return 0.004 + 0.007 * (1 - t * t);
+}
+// Slight spoon: the tips curl up at the edges as well.
+function spoon(x, z) {
+  const t = Math.max(0, (Math.abs(z) - (BOARD_LEN / 2 - NOSE_LEN - 0.05)) / (NOSE_LEN + 0.05));
+  return t * t * (x / HALF_END) ** 2 * 0.012;
+}
+
+function deckGeometry(face) {
+  // face: 'top' | 'base'
+  const pos = [], uv = [], idx = [];
+  for (let j = 0; j <= SEG_Z; j++) {
+    const z = -BOARD_LEN / 2 + (j / SEG_Z) * BOARD_LEN;
+    const hw = Math.max(halfWidth(z), 0.0005) - (face === 'base' ? 0.0015 : 0.003);
+    for (let i = 0; i <= SEG_X; i++) {
+      const x = -hw + (i / SEG_X) * hw * 2;
+      const y = baseHeight(z) + spoon(x, z) + (face === 'top' ? thickness(z) + EDGE_H : 0.0002);
+      pos.push(x, y, z);
+      uv.push((z + BOARD_LEN / 2) / BOARD_LEN, (x + HALF_END) / (HALF_END * 2));
+    }
   }
-  if (flip) {
-    const idx = g.index.array;
-    for (let i = 0; i < idx.length; i += 3) { const t = idx[i]; idx[i] = idx[i + 2]; idx[i + 2] = t; }
+  const w = SEG_X + 1;
+  for (let j = 0; j < SEG_Z; j++) {
+    for (let i = 0; i < SEG_X; i++) {
+      const a = j * w + i, b = a + 1, c = a + w, d = c + 1;
+      if (face === 'top') idx.push(a, c, b, b, c, d); else idx.push(a, b, c, b, d, c);
+    }
   }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
   g.computeVertexNormals();
   return g;
 }
 
-function edgeGeometry(t) {
-  const pts = outline();
+// A band around the outline between two heights: the sidewall, or the steel edge.
+function rimGeometry(y0fn, y1fn, inset = 0) {
+  const pts = outline(64);
   const pos = [], idx = [];
   pts.forEach(([x, z]) => {
-    const k = kick(z);
-    pos.push(x, t + k, z, x, -t + k, z);
+    const xx = x - Math.sign(x) * inset;
+    pos.push(xx, y0fn(xx, z), z, xx, y1fn(xx, z), z);
   });
   const n = pts.length;
   for (let i = 0; i < n; i++) {
@@ -310,38 +345,124 @@ function boardTextures(design) {
     t.anisotropy = 8;
     return t;
   };
-  const tex = { top: mk(art.top), base: mk(art.base) };
+  const tex = { top: mk(art.top), base: mk(art.base), structure: baseStructure() };
   texCache.set(design.id, tex);
   return tex;
 }
 
+// Stone-ground base structure: fine lines along the board, as a roughness map.
+let structureTex = null;
+function baseStructure() {
+  if (structureTex) return structureTex;
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#7a7a7a'; ctx.fillRect(0, 0, 512, 64);
+  const r = rng(21);
+  for (let y = 0; y < 64; y++) {
+    ctx.fillStyle = `rgba(${r() < 0.5 ? 255 : 0},${r() < 0.5 ? 255 : 0},${r() < 0.5 ? 255 : 0},${0.05 + r() * 0.12})`;
+    ctx.fillRect(0, y, 512, 1);
+  }
+  structureTex = new THREE.CanvasTexture(c);
+  return structureTex;
+}
+
+// ---------- bindings ----------
+
+function roundedRect(w, h, r) {
+  const s = new THREE.Shape();
+  s.moveTo(-w / 2 + r, -h / 2);
+  s.lineTo(w / 2 - r, -h / 2); s.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r);
+  s.lineTo(w / 2, h / 2 - r); s.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2);
+  s.lineTo(-w / 2 + r, h / 2); s.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r);
+  s.lineTo(-w / 2, -h / 2 + r); s.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2);
+  return s;
+}
+
+// Strap arching over the boot: a padded tube along an arc across the binding.
+function strapGeometry(halfSpan, height, radius, depth) {
+  const curve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-halfSpan, 0, 0), new THREE.Vector3(-halfSpan * 0.7, height * 0.8, 0),
+    new THREE.Vector3(0, height, 0), new THREE.Vector3(halfSpan * 0.7, height * 0.8, 0), new THREE.Vector3(halfSpan, 0, 0),
+  ]);
+  const g = new THREE.TubeGeometry(curve, 24, radius, 8, false);
+  g.scale(1, 1, depth / radius);
+  return g;
+}
+
+function makeBinding(mats, accentMat, flip) {
+  const b = new THREE.Group();
+  // baseplate on its mounting disc
+  const plate = new THREE.Mesh(new THREE.ExtrudeGeometry(roundedRect(0.27, 0.15, 0.04), { depth: 0.012, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 2 }), mats.plastic);
+  plate.rotation.x = -Math.PI / 2;
+  plate.position.y = 0.006;
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.008, 28), mats.metal);
+  disc.position.y = 0.024;
+  b.add(plate, disc);
+  for (let k = 0; k < 4; k++) {
+    const screw = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.004, 8), mats.dark);
+    screw.position.set(Math.cos(k * Math.PI / 2 + 0.6) * 0.03, 0.03, Math.sin(k * Math.PI / 2 + 0.6) * 0.03);
+    b.add(screw);
+  }
+  // heel cup: a curved band around the heel side
+  const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.06, 24, 1, true, Math.PI * 0.55, Math.PI * 0.9), mats.metal);
+  cup.position.set(-0.07, 0.045, 0);
+  cup.material = mats.metal;
+  b.add(cup);
+  // highback: curved shell behind the calf, leaning forward
+  const hb = new THREE.Mesh(new THREE.CylinderGeometry(0.082, 0.07, 0.2, 24, 1, true, Math.PI * 0.6, Math.PI * 0.8), mats.plastic);
+  hb.material.side = THREE.DoubleSide;
+  hb.position.set(-0.09, 0.15, 0);
+  hb.rotation.z = -0.22;
+  const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.0835, 0.0835, 0.03, 24, 1, true, Math.PI * 0.75, Math.PI * 0.5), accentMat);
+  stripe.material.side = THREE.DoubleSide;
+  stripe.position.set(-0.088, 0.21, 0);
+  stripe.rotation.z = -0.22;
+  b.add(hb, stripe);
+  // ankle strap with a ratchet, toe strap over the toe box
+  const ankle = new THREE.Mesh(strapGeometry(0.075, 0.1, 0.018, 0.045), accentMat);
+  ankle.rotation.y = Math.PI / 2;
+  ankle.position.set(0.0, 0.035, 0);
+  ankle.rotation.z = -0.35;
+  const ladder = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.006, 0.018), mats.dark);
+  ladder.position.set(0.02, 0.12, 0.05);
+  ladder.rotation.x = -0.6;
+  const ratchet = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.012, 0.022), mats.metal);
+  ratchet.position.set(0.03, 0.115, -0.045);
+  ratchet.rotation.x = 0.6;
+  const toe = new THREE.Mesh(strapGeometry(0.07, 0.075, 0.011, 0.03), mats.dark);
+  toe.rotation.y = Math.PI / 2;
+  toe.position.set(0.105, 0.03, 0);
+  b.add(ankle, ladder, ratchet, toe);
+  if (flip) b.scale.z = -1;
+  return b;
+}
+
 export function makeBoard(design) {
   const group = new THREE.Group();
-  const T = 0.008;
   const tex = boardTextures(design);
-  const top = new THREE.Mesh(capGeometry(T + 0.0005, false), new THREE.MeshStandardMaterial({ map: tex.top, roughness: 0.35, metalness: 0.05 }));
-  const base = new THREE.Mesh(capGeometry(-T - 0.0005, true), new THREE.MeshStandardMaterial({ map: tex.base, roughness: 0.25, metalness: 0.05 }));
-  const edge = new THREE.Mesh(edgeGeometry(T), new THREE.MeshStandardMaterial({ color: 0x9aa3ad, roughness: 0.3, metalness: 0.8 }));
-  group.add(top, base, edge);
+  const top = new THREE.Mesh(deckGeometry('top'), new THREE.MeshPhysicalMaterial({ map: tex.top, roughness: 0.32, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.12 }));
+  const base = new THREE.Mesh(deckGeometry('base'), new THREE.MeshStandardMaterial({ map: tex.base, roughness: 0.42, roughnessMap: tex.structure, metalness: 0 }));
+  const sideY0 = (x, z) => baseHeight(z) + spoon(x, z) + EDGE_H;
+  const sideY1 = (x, z) => baseHeight(z) + spoon(x, z) + thickness(z) + EDGE_H;
+  const side = new THREE.Mesh(rimGeometry(sideY0, sideY1, 0.0015), new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: 0.45 }));
+  const edge = new THREE.Mesh(rimGeometry((x, z) => baseHeight(z) + spoon(x, z), sideY0), new THREE.MeshStandardMaterial({ color: 0xb8c0c8, roughness: 0.22, metalness: 0.95 }));
+  group.add(top, base, side, edge);
 
-  const dark = new THREE.MeshStandardMaterial({ color: 0x1b1e24, roughness: 0.55 });
-  const accent = new THREE.MeshStandardMaterial({ color: new THREE.Color(design.accent), roughness: 0.45 });
+  const mats = {
+    plastic: new THREE.MeshStandardMaterial({ color: 0x1b1e24, roughness: 0.5 }),
+    metal: new THREE.MeshStandardMaterial({ color: 0x9aa3ad, roughness: 0.3, metalness: 0.85 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x0f1115, roughness: 0.6 }),
+  };
+  const accent = new THREE.MeshStandardMaterial({ color: new THREE.Color(design.accent), roughness: 0.55 });
   for (const [z, ang] of [[-0.26, 0.31], [0.26, -0.16]]) {
-    const b = new THREE.Group();
-    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.018, 0.13), dark);
-    plate.position.y = T + 0.01;
-    const high = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.17, 0.15), dark);
-    high.position.set(-0.13, T + 0.09, 0);
-    high.rotation.z = 0.25;
-    const strap1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.035, 0.16), accent);
-    strap1.position.set(0.06, T + 0.115, 0);
-    const strap2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.15), accent);
-    strap2.position.set(0.12, T + 0.05, 0);
-    b.add(plate, high, strap1, strap2);
-    b.position.z = z;
+    const b = makeBinding(mats, accent, false);
+    b.position.set(0, baseHeight(z) + thickness(z) + EDGE_H, z);
     b.rotation.y = ang;
     group.add(b);
   }
   group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   return group;
 }
+
+export const BOARD_TOP_Y = CAMBER + thickness(0) + EDGE_H;

@@ -1,47 +1,16 @@
-// Slopestyle course: analytic height field (base slope + valley walls + park
-// features) and rail geometry. Pure logic, no rendering, so physics can run
-// headless. Coordinates: x = lateral (right is +x when facing downhill),
-// z = -d, where d is the distance down the course.
+// Course: analytic height field (base slope + valley walls + park features)
+// and rail geometry, built from a map definition (src/maps.js). Pure logic,
+// no rendering, so physics can run headless. Coordinates: x = lateral (right
+// is +x when facing downhill), z = -d, where d is the distance down the course.
 import * as THREE from 'three';
+import { MAPS } from './maps.js';
 
 export const DEG = Math.PI / 180;
-export const BASE_ANGLE = 15 * DEG;
-export const GRADE = Math.tan(BASE_ANGLE);
-export const START_D = -80;
-export const SPAWN_D = 6;
-export const FINISH_D = 800;
-export const RUNOUT = 80;
-export const END_D = 1000;
-export const PARK_HALF = 26;
 
 export const smoothstep = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 };
-
-export function baseY(d) {
-  if (d <= FINISH_D) return -d * GRADE;
-  const s = Math.min(d - FINISH_D, RUNOUT);
-  return -FINISH_D * GRADE - GRADE * (s - (s * s) / (2 * RUNOUT));
-}
-
-// Valley walls and natural terrain outside the groomed park lane.
-function lateral(x, d) {
-  const ax = Math.abs(x);
-  let y = 0;
-  if (ax > PARK_HALF) {
-    const e = ax - PARK_HALF;
-    y += 45 * (1 - Math.exp(-(e * e) / 700)) + e * 0.15;
-  }
-  const w = smoothstep(PARK_HALF - 4, PARK_HALF + 12, ax);
-  if (w > 0) {
-    y += w * (Math.sin(x * 0.13 + d * 0.021) * Math.cos(d * 0.047 - x * 0.06) * 1.6 +
-      Math.sin(d * 0.16 + x * 0.29) * 0.3);
-  }
-  // uphill of the start the terrain rises into a ridge
-  if (d < -20) y += (d + 20) * (d + 20) * 0.012;
-  return y;
-}
 
 // Height gained over a horizontal run whose surface angle changes linearly a0 -> a1.
 function arcRise(a0, a1, len) {
@@ -59,11 +28,14 @@ function sideFalloff(h, x, cx, halfWidth, k = 0.8, min = 1.5) {
 
 // A table-top kicker: takeoff arc -> lip -> deck -> knuckle -> landing -> runout.
 // Landing length is solved so the profile rejoins the base slope exactly.
+// Natural kickers (windlips) get a wide, soft shoulder instead of a shaped wall.
 export class Kicker {
-  constructor(o) {
-    Object.assign(this, { knuckle: 5, land: 24, runout: 9, deck: -2, width: 9 }, o);
+  constructor(o, course) {
+    Object.assign(this, { knuckle: 5, land: 24, runout: 9, deck: -2, width: 9, natural: false }, o);
     this.type = 'kicker';
-    const ab = -BASE_ANGLE, lip = this.lip * DEG, deck = this.deck * DEG, land = -this.land * DEG;
+    const base = course.angle;
+    const grade = course.grade;
+    const ab = -base, lip = this.lip * DEG, deck = this.deck * DEG, land = -this.land * DEG;
     const segs = [
       { len: this.takeoff, a0: ab, a1: lip },
       { len: this.table, a0: deck, a1: deck },
@@ -72,7 +44,7 @@ export class Kicker {
     let u = 0, p = 0;
     for (const s of segs) { p += arcRise(s.a0, s.a1, s.len); u += s.len; }
     const rr = arcRise(land, ab, this.runout);
-    const landLen = (p + rr + GRADE * (u + this.runout)) / (Math.tan(-land) - GRADE);
+    const landLen = (p + rr + grade * (u + this.runout)) / (Math.tan(-land) - grade);
     segs.push({ len: landLen, a0: land, a1: land }, { len: this.runout, a0: land, a1: ab });
     this.segs = segs;
     this.landLen = landLen;
@@ -82,13 +54,14 @@ export class Kicker {
     this.landU = this.knuckleU + this.knuckle;
     this.dMin = this.d;
     this.dMax = this.d + this.len;
+    this.falloff = this.natural ? [2.2, 4] : [0.8, 1.5];
 
     this.step = 0.1;
     const n = Math.ceil(this.len / this.step) + 2;
     this.tab = new Float32Array(n);
     for (let i = 0; i < n; i++) {
       const uu = Math.min(i * this.step, this.len);
-      this.tab[i] = this.profile(uu) + GRADE * uu;
+      this.tab[i] = this.profile(uu) + grade * uu;
     }
   }
 
@@ -114,7 +87,24 @@ export class Kicker {
 
   heightOffset(x, d) {
     if (d <= this.dMin || d >= this.dMax) return 0;
-    return sideFalloff(this.centerOffset(d), x, this.x, this.width / 2);
+    return sideFalloff(this.centerOffset(d), x, this.x, this.width / 2, this.falloff[0], this.falloff[1]);
+  }
+}
+
+// Smooth natural bump across (part of) the slope. Riding over it fast gives air.
+export class Roller {
+  constructor(o) {
+    Object.assign(this, { width: 30, x: 0 }, o);
+    this.type = 'roller';
+    this.dMin = this.d;
+    this.dMax = this.d + this.len;
+  }
+  heightOffset(x, d) {
+    if (d <= this.dMin || d >= this.dMax) return 0;
+    const u = (d - this.d) / this.len;
+    // steeper back side than front side, like a wind-blown roll
+    const s = u < 0.55 ? Math.sin((u / 0.55) * Math.PI / 2) : Math.cos(((u - 0.55) / 0.45) * Math.PI / 2);
+    return sideFalloff(this.h * s * s, x, this.x, this.width / 2, 2.5, 6);
   }
 }
 
@@ -129,23 +119,33 @@ export class Ramp {
   heightOffset(x, d) {
     if (d <= this.dMin || d >= this.dMax) return 0;
     const u = (d - this.d) / this.len;
-    return sideFalloff(this.h * Math.pow(u, 1.6), x, this.x, this.width / 2, 0.5, 0.8);
+    const cx = this.x + (this.x1 - this.x) * u;
+    return sideFalloff(this.h * Math.pow(u, 1.6), x, cx, this.width / 2, 0.5, 0.8);
   }
 }
 
-// Rails and boxes run straight down the fall line; each segment has an absolute angle
-// (negative = downhill). Heights are relative to the base slope at the start.
+// Rails, boxes, ledges and logs. Each segment has an absolute pitch angle
+// (negative = downhill); `yaw` turns the whole feature off the fall line.
+// Heights are relative to the base slope at the start.
+const RAIL_TOL = { rail: 0.48, box: 0.62, ledge: 0.7, log: 0.55 };
+
 export class Rail {
-  constructor(o) {
-    Object.assign(this, { kind: 'rail' }, o);
-    this.tol = this.kind === 'box' ? 0.62 : 0.48;
+  constructor(o, course) {
+    Object.assign(this, { kind: 'rail', yaw: 0 }, o);
+    this.tol = RAIL_TOL[this.kind] ?? 0.5;
+    const yaw = this.yaw * DEG;
+    const sx = Math.sin(yaw), cz = Math.cos(yaw);
+    // Built features are set relative to the base slope; fallen logs lie on the real snow,
+    // which in the backcountry undulates, so their points follow the terrain.
+    const onSnow = this.kind === 'log';
     const pts = [];
-    let d = this.d, y = baseY(this.d) + this.h;
-    pts.push(new THREE.Vector3(this.x, y, -d));
+    let d = this.d, x = this.x, y = (onSnow ? course.heightAtD(x, d) : course.baseY(this.d)) + this.h;
+    pts.push(new THREE.Vector3(x, y, -d));
     for (const s of this.segs) {
-      d += s.len;
-      y += s.len * Math.tan(s.angle * DEG);
-      pts.push(new THREE.Vector3(this.x, y, -d));
+      d += s.len * cz;
+      x += s.len * sx;
+      y = onSnow ? course.heightAtD(x, d) + this.h : y + s.len * Math.tan(s.angle * DEG);
+      pts.push(new THREE.Vector3(x, y, -d));
     }
     this.points = pts;
     this.segments = [];
@@ -156,51 +156,94 @@ export class Rail {
       dir.normalize();
       this.segments.push({ a, b, dir, len, hlen: Math.hypot(dir.x, dir.z) });
     }
-    this.zMax = -this.d;
-    this.zMin = -d;
+    this.length = this.segments.reduce((acc, s) => acc + s.len, 0);
+    this.zMax = Math.max(...pts.map((p) => p.z));
+    this.zMin = Math.min(...pts.map((p) => p.z));
   }
 }
 
 export class Course {
-  constructor() {
-    this.kickers = [
-      // line 1
-      new Kicker({ name: 'Kicker S', x: -9, d: 125, width: 8, lip: 20, takeoff: 7, table: 5, land: 22 }),
-      new Kicker({ name: 'Kicker M', x: 9.5, d: 120, width: 9, lip: 24, takeoff: 10, table: 9, land: 24 }),
-      // line 2
-      new Kicker({ name: 'Kicker M', x: -9, d: 235, width: 9, lip: 24, takeoff: 10, table: 9, land: 24 }),
-      new Kicker({ name: 'Kicker L', x: 9.5, d: 230, width: 10, lip: 27, takeoff: 12, table: 12, land: 26 }),
-      // line 3: the money booter
-      new Kicker({ name: 'Kicker XL', x: 0, d: 440, width: 12, lip: 28, takeoff: 13, table: 10, land: 27, knuckle: 6 }),
-      // line 4
-      new Kicker({ name: 'Kicker M', x: -9, d: 590, width: 9, lip: 24, takeoff: 10, table: 9, land: 24 }),
-      new Kicker({ name: 'Kicker L', x: 9.5, d: 585, width: 10, lip: 27, takeoff: 12, table: 12, land: 26 }),
-    ];
+  constructor(map = MAPS[0]) {
+    this.map = map;
+    this.angle = map.slope * DEG;
+    this.grade = Math.tan(this.angle);
+    this.startD = -80;
+    this.spawnD = 6;
+    this.finishD = map.length;
+    this.runout = 80;
+    // terrain continues past the runout into the hill that closes the valley
+    this.endD = map.length + this.runoutLen() + 300;
+    this.parkHalf = map.parkHalf ?? 26;
+    // groomed lane half width (0 = all natural snow) and how deep the untouched snow is
+    this.groomHalf = map.snow?.groomHalf ?? this.parkHalf;
+    this.powder = map.snow?.powder ?? 0.5;
 
-    const R = (o) => o;
-    const railDefs = [
-      // rail garden 1
-      R({ name: 'Down Box', kind: 'box', x: -11, d: 57, h: 0.48, ramp: 5, segs: [{ len: 12, angle: -15 }] }),
-      R({ name: 'Flat-Down Rail', kind: 'rail', x: 0, d: 62, h: 0.52, ramp: 5, segs: [{ len: 3.5, angle: -6 }, { len: 10, angle: -15 }] }),
-      R({ name: 'Kink Rail', kind: 'rail', x: 11, d: 60, h: 0.8, segs: [{ len: 5, angle: -15 }, { len: 3, angle: -25 }, { len: 5, angle: -15 }] }),
-      // rail garden 2
-      R({ name: 'Long Down Rail', kind: 'rail', x: -10, d: 355, h: 0.55, ramp: 5, segs: [{ len: 18, angle: -15 }] }),
-      R({ name: 'Kink Box', kind: 'box', x: 0, d: 362, h: 0.5, ramp: 5, segs: [{ len: 5, angle: -8 }, { len: 6, angle: -24 }] }),
-      R({ name: 'Down Rail', kind: 'rail', x: 10.5, d: 358, h: 0.72, segs: [{ len: 14, angle: -15 }] }),
-      // final jib line
-      R({ name: 'Rainbow Box', kind: 'box', x: -8, d: 700, h: 0.45, ramp: 5, segs: [{ len: 4, angle: 4 }, { len: 4, angle: -15 }, { len: 4, angle: -32 }] }),
-      R({ name: 'Down Box', kind: 'box', x: 8, d: 702, h: 0.48, ramp: 5, segs: [{ len: 14, angle: -15 }] }),
-    ];
-    this.rails = railDefs.map((o) => new Rail(o));
+    this.kickers = (map.kickers || []).map((o) => new Kicker(o, this));
+    this.rollers = (map.rollers || []).map((o) => new Roller(o));
+    // terrain without ramps first, so rails that lie on the snow can sample it
+    this.features = [...this.kickers, ...this.rollers];
+    this.rails = (map.rails || []).map((o) => new Rail(o, this));
     this.ramps = [];
     for (const r of this.rails) {
-      if (r.ramp) this.ramps.push(new Ramp({ x: r.x, d: r.d - r.ramp, len: r.ramp, h: r.h - 0.06 }));
+      if (!r.ramp) continue;
+      // the ramp runs up to the rail start along the rail's own heading
+      const yaw = r.yaw * DEG;
+      this.ramps.push(new Ramp({ x: r.x - Math.sin(yaw) * r.ramp, x1: r.x, d: r.d - Math.cos(yaw) * r.ramp, len: Math.cos(yaw) * r.ramp, h: r.h - 0.06 }));
     }
-    this.features = [...this.kickers, ...this.ramps];
+    this.features = [...this.kickers, ...this.rollers, ...this.ramps];
+    // rocks and trees in the riding area: hitting one is a crash
+    this.obstacles = (map.obstacles || []).map((o) => ({ ...o, y: 0 }));
+    for (const o of this.obstacles) o.y = this.heightAtD(o.x, o.d);
+  }
+
+  runoutLen() { return 80; }
+
+  baseY(d) {
+    const g = this.grade, f = this.finishD;
+    if (d <= f) return -d * g;
+    const s = Math.min(d - f, this.runout);
+    return -f * g - g * (s - (s * s) / (2 * this.runout));
+  }
+
+  // Valley walls and natural terrain outside the groomed park lane.
+  lateral(x, d) {
+    const ph = this.parkHalf;
+    const ax = Math.abs(x);
+    let y = 0;
+    if (ax > ph) {
+      const e = ax - ph;
+      y += 45 * (1 - Math.exp(-(e * e) / 700)) + e * 0.15;
+    }
+    const w = smoothstep(ph - 4, ph + 12, ax);
+    const rough = this.map.roughness ?? 0;
+    if (w > 0) {
+      y += w * (Math.sin(x * 0.13 + d * 0.021) * Math.cos(d * 0.047 - x * 0.06) * 1.6 +
+        Math.sin(d * 0.16 + x * 0.29) * 0.3);
+    }
+    // backcountry: gentle natural undulation over the whole slope
+    if (rough > 0) {
+      y += rough * (Math.sin(d * 0.045 + x * 0.05) * 0.9 + Math.sin(d * 0.11 - x * 0.13) * 0.35 + Math.sin(x * 0.21 + d * 0.02) * 0.25);
+    }
+    // far past the runout the valley floor fills up to its walls (no gorge in the head wall)
+    const fillFrom = this.finishD + this.runout + 90;
+    if (d > fillFrom) {
+      const f = Math.min(1, (d - fillFrom) / 300);
+      y += Math.max(0, 48 - y) * f * f * (3 - 2 * f);
+    }
+    // uphill of the start the terrain rises into a ridge; past the runout the valley closes
+    if (d < -20) y += (d + 20) * (d + 20) * 0.012;
+    const end = this.finishD + this.runout + 30;
+    // a rounded rise past the runout, steepening further out into the valley's head wall
+    if (d > end) {
+      const e = d - end;
+      const s = Math.min(1, Math.max(0, (e - 120) / 800));
+      y += 38 * (1 - Math.exp(-((e / 70) ** 2))) + 240 * s * s * (3 - 2 * s);
+    }
+    return y;
   }
 
   heightAtD(x, d) {
-    let y = baseY(d) + lateral(x, d);
+    let y = this.baseY(d) + this.lateral(x, d);
     const f = this.features;
     for (let i = 0; i < f.length; i++) {
       if (d > f[i].dMin && d < f[i].dMax) y += f[i].heightOffset(x, d);
@@ -215,5 +258,22 @@ export class Course {
     const hx = (this.heightAt(x + e, z) - this.heightAt(x - e, z)) / (2 * e);
     const hz = (this.heightAt(x, z + e) - this.heightAt(x, z - e)) / (2 * e);
     return out.set(-hx, 1, -hz).normalize();
+  }
+
+  // 0 on groomed corduroy, up to 1 in deep untouched snow.
+  powderAt(x) {
+    const ax = Math.abs(x);
+    const off = this.groomHalf > 0 ? smoothstep(this.groomHalf - 1, this.groomHalf + 6, ax) : 1;
+    return this.powder * off;
+  }
+
+  // Obstacle the rider at p would hit (horizontal radius + height), or null.
+  obstacleAt(p, pad = 0.3) {
+    for (const o of this.obstacles) {
+      const dx = p.x - o.x, dz = p.z + o.d;
+      if (dx * dx + dz * dz > (o.r + pad) * (o.r + pad)) continue;
+      if (p.y < o.y + o.h) return o;
+    }
+    return null;
   }
 }

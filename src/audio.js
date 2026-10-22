@@ -39,6 +39,7 @@ export class AudioFX {
     const of = ctx.createBiquadFilter(); of.type = 'bandpass'; of.frequency.value = 1400; of.Q.value = 3;
     this.grindTone = ctx.createGain(); this.grindTone.gain.value = 0;
     osc.connect(of); of.connect(this.grindTone); this.grindTone.connect(this.master);
+    this.grindOsc = osc;
     osc.start();
   }
 
@@ -58,9 +59,14 @@ export class AudioFX {
     const carve = st === 'ground' ? Math.min(0.55, sp * 0.012 + Math.abs(phys.edge) * sp * 0.012 + phys.skid * 0.35) : 0;
     this.carve.g.gain.setTargetAtTime(on * carve, t, 0.06);
     this.carve.f.frequency.setTargetAtTime(1400 + phys.skid * 1500, t, 0.1);
-    const gr = st === 'grind' ? 0.35 : 0;
+    // steel rings, plastic hisses, concrete scrapes, bark rumbles
+    const kind = st === 'grind' && phys.grind ? phys.grind.rail.kind : null;
+    const tone = { rail: [3200, 0.35, 0.16, 210], box: [1500, 0.3, 0.03, 120], ledge: [900, 0.38, 0.05, 90], log: [420, 0.4, 0.0, 60] }[kind] ?? [2600, 0, 0, 190];
+    const gr = kind ? tone[1] * Math.min(1, 0.4 + phys.speed * 0.08) : 0;
+    this.grind.f.frequency.setTargetAtTime(tone[0] + (phys.speed || 0) * 40, t, 0.05);
     this.grind.g.gain.setTargetAtTime(on * gr, t, 0.03);
-    this.grindTone.gain.setTargetAtTime(on * gr * 0.12, t, 0.03);
+    this.grindTone.gain.setTargetAtTime(on * (kind ? tone[2] : 0), t, 0.03);
+    this.grindOsc.frequency.setTargetAtTime(tone[3] + (phys.speed || 0) * 6, t, 0.05);
   }
 
   thud(strength = 1) {
