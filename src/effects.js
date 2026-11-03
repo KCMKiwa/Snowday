@@ -26,7 +26,7 @@ export class SnowSpray {
       transparent: true, depthWrite: false,
       uniforms: { uScale: { value: 400 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uShade: { value: shadeColor() }, uLight: { value: 1 } },
       vertexShader: `attribute float aSize; attribute float aAlpha; attribute float aSeed; varying float vA; varying float vSeed; uniform float uScale;
-        void main(){ vA = aAlpha; vSeed = aSeed; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = aSize * uScale / -mv.z; gl_Position = projectionMatrix * mv; }`,
+        void main(){ vA = aAlpha; vSeed = aSeed; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = aSize * uScale / -mv.z * step(0.001, aAlpha); gl_Position = projectionMatrix * mv; }`,
       fragmentShader: `varying float vA; varying float vSeed; uniform vec3 uSun; uniform vec3 uShade; uniform float uLight;
         void main(){
           vec2 c = gl_PointCoord - 0.5; c.y = -c.y;
@@ -69,6 +69,11 @@ export class SnowSpray {
   update(dt, pixelScale, camera, sunDir) {
     this.mat.uniforms.uScale.value = pixelScale;
     if (camera && sunDir) this.mat.uniforms.uSun.value.copy(sunDir).transformDirection(camera.matrixWorldInverse);
+    // nothing in the air (and nothing was last frame): nothing to move or upload
+    let alive = 0;
+    for (let i = 0; i < this.max; i++) if (this.life[i] > 0) alive++;
+    if (!alive && !this.wasAlive) return;
+    this.wasAlive = alive > 0;
     for (let i = 0; i < this.max; i++) {
       if (this.life[i] <= 0) { this.alpha[i] = 0; continue; }
       this.life[i] -= dt;
@@ -106,7 +111,7 @@ export class Sparks {
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
       uniforms: { uScale: { value: 400 } },
       vertexShader: `attribute float aHeat; varying float vH; uniform float uScale;
-        void main(){ vH = aHeat; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = (0.02 + aHeat * 0.025) * uScale / -mv.z; gl_Position = projectionMatrix * mv; }`,
+        void main(){ vH = aHeat; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = (0.02 + aHeat * 0.025) * uScale / -mv.z * step(0.001, aHeat); gl_Position = projectionMatrix * mv; }`,
       fragmentShader: `varying float vH; void main(){ float d = length(gl_PointCoord - 0.5); if (d > 0.5 || vH <= 0.0) discard;
         vec3 c = mix(vec3(1.0, 0.25, 0.05), vec3(1.0, 0.92, 0.6), vH); gl_FragColor = vec4(c * 2.0, smoothstep(0.5, 0.0, d) * vH); }`,
     });
@@ -127,6 +132,10 @@ export class Sparks {
   }
   update(dt, pixelScale) {
     this.mat.uniforms.uScale.value = pixelScale;
+    let alive = 0;
+    for (let i = 0; i < this.max; i++) if (this.life[i] > 0) alive++;
+    if (!alive && !this.wasAlive) return;
+    this.wasAlive = alive > 0;
     for (let i = 0; i < this.max; i++) {
       if (this.life[i] <= 0) { this.heat[i] = 0; continue; }
       this.life[i] -= dt;
@@ -252,6 +261,7 @@ export class Tracks {
   reset() {
     this.alpha.fill(0);
     this.last = null;
+    this.geo.attributes.aAlpha.clearUpdateRanges();
     this.geo.attributes.aAlpha.needsUpdate = true;
   }
 
@@ -269,9 +279,11 @@ export class Tracks {
       this.alpha.fill(strength, i * 4, i * 4 + 4);
       // a wall facing the sun is the one on the far side of it
       this.light.fill(-Math.max(-1, Math.min(1, side.dot(this.sunDir) * 2.5)), i * 4, i * 4 + 4);
-      this.geo.attributes.position.needsUpdate = true;
-      this.geo.attributes.aAlpha.needsUpdate = true;
-      this.geo.attributes.aLight.needsUpdate = true;
+      // upload only the quad that changed, not the whole track buffer
+      const a = this.geo.attributes;
+      a.position.addUpdateRange(k, 12); a.position.needsUpdate = true;
+      a.aAlpha.addUpdateRange(i * 4, 4); a.aAlpha.needsUpdate = true;
+      a.aLight.addUpdateRange(i * 4, 4); a.aLight.needsUpdate = true;
     }
     this.last = (this.last || new THREE.Vector3()).copy(p);
     this.lastL.copy(l); this.lastR.copy(r);

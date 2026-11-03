@@ -159,6 +159,52 @@ function drawTopo(ctx) {
   ctx.putImageData(img, 0, 0);
 }
 
+function drawCheckmate(ctx) {
+  // a black and white checkerboard running into a lime fade at the tail
+  const n = 8, c = TEX_H / n;
+  for (let x = 0; x * c < TEX_W; x++) {
+    for (let y = 0; y < n; y++) {
+      ctx.fillStyle = (x + y) % 2 ? '#f1f2f1' : '#141518';
+      ctx.fillRect(x * c, y * c, c, c);
+    }
+  }
+  const g = ctx.createLinearGradient(TEX_W * 0.55, 0, TEX_W, 0);
+  g.addColorStop(0, 'rgba(205,245,100,0)'); g.addColorStop(1, 'rgba(205,245,100,0.92)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, TEX_W, TEX_H);
+}
+
+function drawCamo(ctx) {
+  // snow camo: grey and white blobs on pale blue
+  const r = rng(23);
+  ctx.fillStyle = '#c9d6e2'; ctx.fillRect(0, 0, TEX_W, TEX_H);
+  for (const col of ['#8e9caa', '#f4f7fa', '#5f6c78', '#e3eaf1']) {
+    ctx.fillStyle = col;
+    for (let i = 0; i < 26; i++) {
+      const x = r() * TEX_W, y = r() * TEX_H, rx = 30 + r() * 70, ry = 18 + r() * 40;
+      ctx.beginPath();
+      for (let a = 0; a <= Math.PI * 2 + 0.01; a += Math.PI / 6) {
+        const k = 0.7 + r() * 0.5;
+        const px = x + Math.cos(a) * rx * k, py = y + Math.sin(a) * ry * k;
+        a === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.closePath(); ctx.fill();
+    }
+  }
+}
+
+function drawStripes(ctx) {
+  // retro diagonal stripes in purple, teal, pink and yellow on dark
+  ctx.fillStyle = '#1b1d1f'; ctx.fillRect(0, 0, TEX_W, TEX_H);
+  const cols = ['#6a3cff', '#2ee6c9', '#ff4fa3', '#ffd23f'];
+  ctx.save();
+  ctx.translate(TEX_W / 2, TEX_H / 2); ctx.rotate(-0.5);
+  for (let i = -14; i < 14; i++) {
+    ctx.fillStyle = cols[(i + 28) % 4];
+    ctx.fillRect(i * 64, -TEX_W, 34, TEX_W * 2);
+  }
+  ctx.restore();
+}
+
 export const DESIGNS = [
   { id: 'polar', name: 'Polar Night', tagline: 'Allrounder für jeden Park', draw: drawPolar, accent: '#3cf2b0', stats: { speed: 3, pop: 3, spin: 3 } },
   { id: 'sunset', name: 'Sunset Drive', tagline: 'Schnell auf der Geraden', draw: drawSunset, accent: '#ff4f7a', stats: { speed: 4, pop: 3, spin: 2 } },
@@ -166,6 +212,9 @@ export const DESIGNS = [
   { id: 'ember', name: 'Ember', tagline: 'Viel Pop von der Kante', draw: drawEmber, accent: '#ff7a00', stats: { speed: 3, pop: 4, spin: 3 } },
   { id: 'kiwi', name: 'Kiwi Pop', tagline: 'Weich und verspielt', draw: drawKiwi, accent: '#b6e63a', stats: { speed: 2, pop: 4, spin: 4 } },
   { id: 'topo', name: 'Topo', tagline: 'Dreht wie ein Kreisel', draw: drawTopo, accent: '#b04622', stats: { speed: 3, pop: 2, spin: 5 } },
+  { id: 'camo', name: 'Snow Camo', tagline: 'Leise im Pulver, stark im Spin', draw: drawCamo, accent: '#8e9caa', stats: { speed: 3, pop: 3, spin: 4 } },
+  { id: 'stripes', name: 'Neon Stripes', tagline: 'Schnell und verspielt', draw: drawStripes, accent: '#6a3cff', stats: { speed: 4, pop: 3, spin: 4 } },
+  { id: 'checkmate', name: 'Checkmate', tagline: 'Pro-Modell: stark in allem', draw: drawCheckmate, accent: '#cdf564', stats: { speed: 4, pop: 4, spin: 4 } },
 ];
 
 // Physics multipliers from 1..5 ratings.

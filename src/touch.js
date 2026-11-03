@@ -1,9 +1,10 @@
 // Touch controls for phones and tablets, shown during a run on touch screens:
 // - left half: a floating thumb stick (appears where the thumb lands). Sideways = carve,
 //   or spin in the air (analog: a little = slow, all the way = full speed); up = tuck /
-//   front flip, down = brake / backflip; diagonals in the air give corks, mistys, rodeos.
+//   front flip, down = brake / backflip; diagonals off the lip give corks (bios on skis).
 // - right: POP (hold to load, release to jump), a grab pad (press it and slide toward the
-//   grab you want, the name shows on the pad), TAIL / NOSE (butters, presses, rolls).
+//   grab you want, the name shows on the pad), TAIL / NOSE (butters, presses, rolls),
+//   RODEO (held with a diagonal off the lip: over the top, a rodeo down or a misty up).
 // - top: pause.
 // Everything feeds the same input state as the keyboard (Input.touch).
 import { grabName } from './tricks.js';
@@ -22,7 +23,7 @@ export class TouchControls {
   constructor(input, { onPause, gear = () => 'board' } = {}) {
     this.input = input;
     this.gear = gear;
-    input.touch = { steer: 0, up: false, down: false, jump: false, jumpReleased: false, nose: false, tail: false, grab: null };
+    input.touch = { steer: 0, up: false, down: false, jump: false, jumpReleased: false, nose: false, tail: false, over: false, grab: null };
     const el = document.createElement('div');
     el.className = 'touch';
     el.hidden = true;
@@ -32,12 +33,14 @@ export class TouchControls {
       <button class="t-btn t-grab" aria-label="Grab: drücken und in Richtung des Grabs ziehen"><b>GRAB</b><small></small></button>
       <button class="t-btn t-small t-tail" aria-label="Tail Press oder Roll"><b>TAIL</b></button>
       <button class="t-btn t-small t-nose" aria-label="Nose Press oder Roll"><b>NOSE</b></button>
+      <button class="t-btn t-small t-over" aria-label="Über Kopf: mit Spin und Flip an der Kante Rodeo oder Misty"><b>RODEO</b></button>
       <button class="t-pause" aria-label="Pause">II</button>`;
     document.body.appendChild(el);
     this.el = el;
     const $ = (s) => el.querySelector(s);
     this.zone = $('.t-stickzone'); this.stick = $('.t-stick'); this.knob = $('.t-knob');
     this.grabLabel = $('.t-grab small');
+    this.overLabel = $('.t-over b');
 
     // ---- stick: follows the thumb wherever it lands in the left half
     let stickId = null, cx = 0, cy = 0;
@@ -52,10 +55,12 @@ export class TouchControls {
       const t = input.touch;
       t.steer = -ax; // stick right = steer right (Input: left is +1)
       t.up = dy < -FLIP; t.down = dy > FLIP;
+      this.overLabel.textContent = t.up ? 'MISTY' : 'RODEO';
     };
     const resetStick = () => {
       stickId = null;
       Object.assign(input.touch, { steer: 0, up: false, down: false });
+      this.overLabel.textContent = 'RODEO';
       this.knob.style.transform = '';
       this.stick.classList.remove('on');
       this.stick.style.left = ''; this.stick.style.top = '';
@@ -86,6 +91,7 @@ export class TouchControls {
     hold($('.t-pop'), () => { input.touch.jump = true; }, () => { input.touch.jump = false; input.touch.jumpReleased = true; });
     hold($('.t-tail'), () => { input.touch.tail = true; }, () => { input.touch.tail = false; });
     hold($('.t-nose'), () => { input.touch.nose = true; }, () => { input.touch.nose = false; });
+    hold($('.t-over'), () => { input.touch.over = true; }, () => { input.touch.over = false; });
 
     // ---- grab pad: press = the default grab, slide toward another one to switch
     const grabBtn = $('.t-grab');
@@ -110,7 +116,7 @@ export class TouchControls {
   setVisible(on) {
     this.el.hidden = !on;
     if (!on) {
-      Object.assign(this.input.touch, { steer: 0, up: false, down: false, jump: false, jumpReleased: false, nose: false, tail: false, grab: null });
+      Object.assign(this.input.touch, { steer: 0, up: false, down: false, jump: false, jumpReleased: false, nose: false, tail: false, over: false, grab: null });
       this.el.querySelectorAll('.on').forEach((b) => b.classList.remove('on'));
       this.knob.style.transform = '';
     }

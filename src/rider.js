@@ -10,7 +10,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { makeBoard, BOARD_TOP_Y } from './boards.js';
 import { buildHat, buildGoggles, headShape, skullShape } from './hats.js';
 import { makeSki, makeSkiBoot, makePole, SKI_TOP_Y, SKI_LEN, POLE_LEN } from './skis.js';
-import { damp, wrapPi } from './physics.js';
+import { damp, wrapPi, HIP } from './physics.js';
 
 export const OUTFITS = [
   { id: 'signal', name: 'Signal', jacket: '#ff5a1f', accent: '#1b1f2a', pants: '#1f2738', helmet: '#f1f3f6', glove: '#151820', lens: '#ffa630', boot: '#22252c' },
@@ -19,6 +19,14 @@ export const OUTFITS = [
   { id: 'berry', name: 'Berry', jacket: '#ff4fa3', accent: '#2b2140', pants: '#2b2140', helmet: '#ffffff', glove: '#2b2140', lens: '#b06bff', boot: '#1d1726' },
   { id: 'volt', name: 'Volt', jacket: '#d7ff3a', accent: '#111317', pants: '#111317', helmet: '#111317', glove: '#d7ff3a', lens: '#ff3d7f', boot: '#111317' },
   { id: 'night', name: 'Night', jacket: '#1a1d26', accent: '#7b5cff', pants: '#3a3f4d', helmet: '#7b5cff', glove: '#1a1d26', lens: '#4dffd2', boot: '#101218' },
+  { id: 'tangerine', name: 'Tangerine', jacket: '#ff8a1f', accent: '#2a1a12', pants: '#2a1a12', helmet: '#ffffff', glove: '#2a1a12', lens: '#3ad1ff', boot: '#1d1410' },
+  { id: 'arctic', name: 'Arctic', jacket: '#eef3f8', accent: '#8fa6bd', pants: '#8fa6bd', helmet: '#eef3f8', glove: '#5c6f82', lens: '#7fd3ff', boot: '#3a4654' },
+  { id: 'ocean', name: 'Ocean', jacket: '#0f6e8c', accent: '#7fe0d0', pants: '#123844', helmet: '#7fe0d0', glove: '#123844', lens: '#ff9a3d', boot: '#0d2730' },
+  { id: 'sakura', name: 'Sakura', jacket: '#ffc2d6', accent: '#ffffff', pants: '#f4f0ec', helmet: '#ffc2d6', glove: '#ffffff', lens: '#ff6fa3', boot: '#d9cfc7' },
+  { id: 'lava', name: 'Lava', jacket: '#d12a1e', accent: '#ffb000', pants: '#1a1414', helmet: '#1a1414', glove: '#ffb000', lens: '#ffb000', boot: '#1a1414' },
+  { id: 'blackout', name: 'Blackout', jacket: '#141518', accent: '#2a2c31', pants: '#141518', helmet: '#141518', glove: '#141518', lens: '#cdf564', boot: '#0b0c0e' },
+  { id: 'retro', name: 'Retro 90', jacket: '#6a3cff', accent: '#2ee6c9', pants: '#ff4fa3', helmet: '#ffd23f', glove: '#2ee6c9', lens: '#ffd23f', boot: '#22202a' },
+  { id: 'gold', name: 'Gold Rush', jacket: '#c99a2e', accent: '#1b1d1f', pants: '#1b1d1f', helmet: '#f1d27a', glove: '#1b1d1f', lens: '#ff3d7f', boot: '#1b1d1f' },
 ];
 
 const FOOT_Z = 0.26;
@@ -59,17 +67,65 @@ const SKI_YAW = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 
 // Freeski grabs on the same keys. hands: which ski each hand takes ([ski 0 = left / 1 =
 // right, position along it, +1 outside / -1 inside edge / 0 top]); skis: [yaw, pitch, lift]
 // tweaks per ski; lift: how far the knees bring the skis up.
+// (pronounced, after cork7's grabs: the knees come right up to the hand, the skis cross in
+// an X or tip hard, the chest folds over the knees, and the free arm goes out wide)
 const SKI_GRABS = {
-  indy: { hands: { r: [1, 0.1, 1] }, hip: 0.5, lift: 0.3, lean: [0.85, 0.25] }, // Safety
-  mute: { hands: { l: [1, 0.16, 1] }, hip: 0.5, lift: 0.3, lean: [1.0, 0.3], skis: [[-0.14, 0.05], [0.14, 0.05]] },
-  melon: { hands: { r: [1, 0.05, -1] }, hip: 0.5, lift: 0.3, lean: [0.85, -0.1] }, // Critical
-  stalefish: { hands: { r: [1, -0.5, 1] }, hip: 0.52, lift: 0.26, lean: [0.2, 0.45], skis: [[0, 0.25], [0, 0.25]] }, // Blunt
-  nose: { hands: { r: [1, 0.62, 0] }, hip: 0.5, lift: 0.3, lean: [1.35, 0.15], skis: [[0, 0.45], [0, 0.45]] }, // Tip grab
-  tail: { hands: { r: [1, -0.62, 0] }, hip: 0.55, lift: 0.22, lean: [0.15, 0.5], skis: [[0, -0.4], [0, -0.4]] },
-  method: { hands: { l: [0, 0.5, 0], r: [1, 0.5, 0] }, hip: 0.46, lift: 0.34, lean: [1.5, 0], skis: [[0, 0.4], [0, 0.4]] }, // Truckdriver
-  japan: { hands: { l: [1, 0.18, -1] }, hip: 0.52, lift: 0.28, lean: [1.1, 0.35], skis: [[0, 0], [0.3, -0.45, 0.08]] },
+  indy: { hands: { r: [1, 0.1, 1] }, hip: 0.46, lift: 0.36, lean: [1.1, 0.25], skis: [[0.2, -0.4], [-0.2, -0.4]] }, // Safety
+  mute: { hands: { l: [1, 0.16, 1] }, hip: 0.46, lift: 0.36, lean: [1.3, 0.3], skis: [[-0.34, -0.8], [0.34, -0.65]] },
+  melon: { hands: { r: [1, 0.05, -1] }, hip: 0.46, lift: 0.36, lean: [1.1, -0.2], skis: [[0.3, -0.55], [-0.3, -0.7]] }, // Critical
+  stalefish: { hands: { r: [1, -0.5, 1] }, hip: 0.48, lift: 0.32, lean: [0.3, 0.55], skis: [[0.15, 0.55], [0.15, 0.6]] }, // Blunt
+  nose: { hands: { r: [1, 0.62, 0] }, hip: 0.45, lift: 0.38, lean: [1.5, 0.15], skis: [[0, 0.75], [0, 0.75]] }, // Tip grab
+  tail: { hands: { r: [1, -0.62, 0] }, hip: 0.52, lift: 0.28, lean: [0.25, 0.55], skis: [[-0.45, -0.95], [-0.55, -1.05]] },
+  method: { hands: { l: [0, 0.5, 0], r: [1, 0.5, 0] }, hip: 0.42, lift: 0.42, lean: [1.6, 0], skis: [[0.12, 0.6], [-0.12, 0.6]] }, // Truckdriver
+  japan: { hands: { l: [1, 0.18, -1] }, hip: 0.5, lift: 0.32, lean: [0.7, 0.4], skis: [[0.15, -0.3], [-0.4, 0.95, 0.15]] },
 };
-const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+// The skier's poses in the air, rebuilt for this rig from cork7's (measured off its rider:
+// joint positions from the hips). hip / lift2: how bent the legs are and how far the skis
+// come up; dx: the feet forward (+) or back (-) of the hips; lean: the spine (+ forward);
+// nod: the head (+ down); twist / head: shoulders and head turned with the spin; pitch: the
+// skis (+ tips up); sep: half the stance; hands from the hips (forward, up, out: F left,
+// R right); elbow: how far the elbows point out to the sides; poles: directions from the
+// hands.
+// air: standing tall, arms hanging a little out. ready: arms open in front for the landing.
+// back: the backflip, arched back: head and shoulders thrown back, knees bent with the feet
+// kicked back behind, skis tips down, arms spread wide. front: the chest goes over the skis.
+// spin: arms out wide at the belly, shoulders turned a little. cork: shoulders wound round,
+// the outside hand across the belly. (spin and cork turn left; mirrored for a right spin.)
+const AIR_POSES = {
+  air: { hip: 0.93, lift2: 0, dx: 0.03, lean: 0.2, nod: 0, twist: 0, head: 0, pitch: -0.09, sep: 0.13, elbow: 1.1,
+    handF: [0.22, 0.02, -0.37], handR: [0.22, 0.02, 0.37], poleL: [-0.55, -1, 0.05], poleR: [-0.55, -1, -0.05] },
+  ready: { hip: 0.93, lift2: 0, dx: 0.02, lean: 0.31, nod: 0.1, twist: 0, head: 0, pitch: 0, sep: 0.13, elbow: 1,
+    handF: [0.3, 0.16, -0.56], handR: [0.3, 0.16, 0.56], poleL: [-0.4, -1, -0.65], poleR: [-0.4, -1, 0.65] },
+  back: { hip: 0.83, lift2: 0.26, dx: -0.5, lean: -0.75, nod: -0.95, twist: 0, head: 0, pitch: -1.15, sep: 0.12, elbow: 0.2,
+    handF: [-0.13, 0.29, -0.72], handR: [-0.13, 0.29, 0.72], poleL: [-0.25, -1, 0.1], poleR: [-0.25, -1, -0.1] },
+  front: { hip: 0.94, lift2: 0, dx: 0.17, lean: 0.94, nod: 0.15, twist: 0, head: 0, pitch: -0.19, sep: 0.13, elbow: 0.7,
+    handF: [0.38, -0.08, -0.5], handR: [0.38, -0.08, 0.5], poleL: [-0.5, -1, -0.15], poleR: [-0.5, -1, 0.15] },
+  spin: { hip: 0.93, lift2: 0, dx: 0.02, lean: 0.15, nod: 0, twist: 0.28, head: 0.4, pitch: -0.05, sep: 0.13, elbow: 0.9,
+    handF: [0.07, 0.22, -0.71], handR: [0.41, 0.22, 0.59], poleL: [-0.35, -0.7, -0.7], poleR: [-0.2, -0.75, 0.75] },
+  cork: { hip: 0.93, lift2: 0, dx: 0.03, lean: 0, nod: 0, twist: 0.65, head: 0.35, pitch: -0.03, sep: 0.12, elbow: 0.6,
+    handF: [0.07, 0.07, -0.34], handR: [0.34, 0.08, 0.03], poleL: [-0.25, -1, -0.1], poleR: [-0.2, -0.9, -0.55] },
+};
+const mirrorPose = (p) => ({
+  ...p, twist: -p.twist, head: -p.head,
+  handF: [p.handR[0], p.handR[1], -p.handR[2]], handR: [p.handF[0], p.handF[1], -p.handF[2]],
+  poleL: [p.poleR[0], p.poleR[1], -p.poleR[2]], poleR: [p.poleL[0], p.poleL[1], -p.poleL[2]],
+});
+AIR_POSES.spinRight = mirrorPose(AIR_POSES.spin);
+AIR_POSES.corkRight = mirrorPose(AIR_POSES.cork);
+// The weighted sum of some of the poses ([[pose, weight], ...], weights adding up to 1).
+function blendPoses(parts) {
+  const o = { hip: 0, lift2: 0, dx: 0, lean: 0, nod: 0, twist: 0, head: 0, pitch: 0, sep: 0, elbow: 0, handF: [0, 0, 0], handR: [0, 0, 0], poleL: [0, 0, 0], poleR: [0, 0, 0] };
+  for (const [p, w] of parts) {
+    if (w <= 0) continue;
+    for (const k in o) {
+      if (Array.isArray(o[k])) for (let i = 0; i < 3; i++) o[k][i] += p[k][i] * w;
+      else o[k] += p[k] * w;
+    }
+  }
+  return o;
+}
+const smooth =(a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 const Y = new THREE.Vector3(0, 1, 0);
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3();
@@ -832,6 +888,7 @@ export class RiderModel {
     this.root.position.copy(phys.pos).add(phys.renderOffset);
     this.root.position.y -= phys.sink;
     this.root.quaternion.copy(quat);
+    this.hipPivot(dt, phys, quat);
     this.body.quaternion.copy(this.gear === 'ski' ? SKI_YAW : q1.identity());
     this.state = phys.state;
     // a hard slam bounces the whole body once off the snow
@@ -844,6 +901,19 @@ export class RiderModel {
     if (this.char) this.applySkinned(T);
     else this.applyProcedural(T);
     if (this.gear === 'ski') this.placePoles(T);
+  }
+
+  // In the air the body turns about its hips, not its boots (physics bodyAt, as cork7 has
+  // it): the hips ride HIP above the arc and the boots swing round under them. Eased in off
+  // the lip; back on the snow it eases out while the body settles onto the slope (a saved
+  // landing comes down well off it), so the hips stay put instead of the body swinging.
+  hipPivot(dt, phys, quat) {
+    const P = this.pose, off = P.pivot ??= new THREE.Vector3();
+    P.pivotW = phys.state === 'air' ? smooth(0, 0.16, phys.airTime) : (P.pivotW ?? 0) * Math.exp(-10 * dt);
+    if (phys.state === 'air') phys.landingUp(phys.landAt.t, phys.landAt.n, off);
+    else off.copy(phys.normal);
+    off.sub(v1.set(0, 1, 0).applyQuaternion(quat)).multiplyScalar(HIP * P.pivotW);
+    this.root.position.add(off);
   }
 
   // Ease the pose toward this frame's targets; shared by board and skis.
@@ -991,7 +1061,9 @@ export class RiderModel {
       headYaw = sw ? -1.2 : 1.2;
       // holding a rotation the body is compact; let go, it opens up (arms out, legs long)
       // and that is what slows the rotation down
-      const winding = Math.abs(phys.spinIn) > 0.25 || Math.abs(phys.flipIn) > 0.25 || Math.abs(phys.rollIn) > 0.25;
+      // (upside down nobody opens up: the body stays tucked until it comes round)
+      const upsideDown = v1.set(0, 1, 0).applyQuaternion(phys.airQ).y < 0.3;
+      const winding = upsideDown || Math.abs(phys.spinIn) > 0.25 || Math.abs(phys.flipIn) > 0.25 || Math.abs(phys.rollIn) > 0.25;
       if (spinning) {
         // tuck and pull the arms in: a compact body spins; shoulders and head lead,
         // more so the faster the spin
@@ -1132,9 +1204,9 @@ export class RiderModel {
     const R = this.rig, P = this.pose, st = phys.state, sw = phys.switch;
     const leg = R.thigh + R.shin;
     let hip = 0.82, leanX = 0.34, leanZ = 0, hipX = -0.1, hipZ = 0, twist = 0, waist = 0, pitch = 0, lift2 = 0;
-    let headYaw = 0, sep = SKI_SEP;
+    let headYaw = 0, sep = SKI_SEP, elbow = 0.6;
     let handF = [0.3, 0.06, -0.3], handR = [0.3, 0.06, 0.3];
-    let poleL = [-0.5, -1, -0.28], poleR = [-0.5, -1, 0.28];
+    let poleL = [-0.6, -1, -0.08], poleR = [-0.6, -1, 0.08];
     const skiT = [{ yaw: 0, pitch: 0, dy: 0, dx: 0 }, { yaw: 0, pitch: 0, dy: 0, dx: 0 }];
     let grab = null;
     let kneeL = v2.set(1, 0, -0.12).clone(), kneeR = v2.set(1, 0, 0.12).clone();
@@ -1143,15 +1215,20 @@ export class RiderModel {
     const phi = st === 'ground' ? phys.lean * 0.8 * (sw ? -1 : 1) : 0;
     P.phi = damp(P.phi ?? 0, phi, 22, dt);
 
+    P.upT = inp.up && st === 'ground' ? (P.upT ?? 0) + dt : 0;
     if (st === 'ground') {
       const charge = phys.charge / 0.55;
       const absorb = Math.max(0, 1 - phys.landT / 0.35) * Math.min(1, phys.impact / 8);
       const k = Math.min(1, Math.abs(phi) / 0.7);
       const sp = phys.speed;
-      const crouch = Math.min(1, 0.2 + charge * 0.5 + absorb * 0.6 + phys.skid * 0.25 + k * 0.25);
-      hip = 0.84 - crouch * 0.3;
-      hipX = -0.08 - crouch * 0.1;
-      leanX = 0.3 + crouch * 0.25;
+      // Standing tall and loose, the way freeskiers ride (cork7's riding stance, measured off
+      // its rider): legs almost straight, chest up, arms hanging relaxed with the poles
+      // trailing. The knees only give when loading a pop, soaking up a landing, skidding or
+      // carving hard.
+      const crouch = Math.min(1, charge * 0.55 + absorb * 0.6 + phys.skid * 0.25 + k * 0.2);
+      hip = 0.95 - crouch * 0.3;
+      hipX = 0.03 - crouch * 0.12;
+      leanX = 0.11 + crouch * 0.3;
       // angulation: hips into the turn, upper body tilts back over the outside ski
       const inside = -Math.sign(phi);
       hipZ = inside * 0.06 * k;
@@ -1160,7 +1237,7 @@ export class RiderModel {
       twist = THREE.MathUtils.clamp(rel, -0.9, 0.9) * 0.7;
       headYaw = THREE.MathUtils.clamp(rel, -1.2, 1.2) * 0.4;
       const sway = Math.sin(this.t * 2.1) * 0.02;
-      handF = [0.32, 0.08 + sway, -0.3]; handR = [0.32, 0.08 - sway, 0.3];
+      handF = [0.12, -0.1 + sway, -0.31]; handR = [0.12, -0.1 - sway, 0.31];
       if (sw) {
         // Riding switch (backwards): the skier looks over one shoulder down the hill, the
         // turn spread through the waist, the shoulders and the neck; the shoulder is kept
@@ -1180,7 +1257,7 @@ export class RiderModel {
         poleL = [outL[0] * 0.55 + 0.45, -1, outL[2] * 0.55];
         poleR = [outR[0] * 0.55 + 0.45, -1, outR[2] * 0.55];
         // a little lower and more centred over the feet than riding forward
-        hip -= 0.03; leanX = 0.22 + crouch * 0.15; hipX = -0.04;
+        hip -= 0.03; leanX = 0.1 + crouch * 0.15; hipX = 0;
         P.plant = null;
       } else {
         P.switchLook = 0;
@@ -1199,10 +1276,12 @@ export class RiderModel {
       }
       if (sw) {
         // (no tuck or double-poling backwards)
-      } else if (inp.up && sp >= 7.5) {
-        // tuck: chest down on the thighs, fists in front of the face, poles under the arms
-        hip = 0.5; hipX = -0.2; leanX = 1.55;
-        handF = [0.48, 0.3, -0.12]; handR = [0.48, 0.3, 0.12];
+      } else if (inp.up && (P.upT >= 1.25 || sp >= 18)) {
+        // tuck, as cork7 has it: only once W has been held a while or it is fast already, and
+        // a racer's tuck rather than a squat: hips back, chest forward, hands out in front,
+        // poles under the arms
+        hip = 0.8; hipX = -0.28; leanX = 0.94;
+        handF = [0.27, -0.05, -0.18]; handR = [0.27, -0.05, 0.18];
         poleL = [-1, 0.22, -0.1]; poleR = [-1, 0.22, 0.1];
         headYaw = 0;
       } else if (inp.up && !phys.finished) {
@@ -1212,7 +1291,7 @@ export class RiderModel {
         handF = [0.5 - 0.72 * w, 0.42 - 0.54 * w, -0.28]; handR = [0.5 - 0.72 * w, 0.42 - 0.54 * w, 0.28];
         poleL = [0.25 - 1.1 * w, -1 + 0.4 * w, -0.18]; poleR = [0.25 - 1.1 * w, -1 + 0.4 * w, 0.18];
       }
-      if (inp.down || phys.brake > 0.3) {
+      if ((inp.down && !phys.onTakeoffRamp()) || phys.brake > 0.3) {
         // hockey stop: skis across, low, upper body facing down the hill
         hip = Math.min(hip, 0.66); leanX = 0.2;
         if (!sw) { handF = [0.36, 0.14, -0.36]; handR = [0.36, 0.14, 0.36]; }
@@ -1227,7 +1306,7 @@ export class RiderModel {
       // loading the pop: wind the shoulders against the coming spin, or set up a flip
       if (charge > 0.1) { twist -= phys.windup * 0.7; headYaw -= phys.windup * 0.3; }
       if (Math.abs(phys.flipLoad) > 0.1) { leanX += -phys.flipLoad * 0.25; handF = [0.3, 0.38, -0.3]; handR = [0.3, 0.38, 0.3]; }
-      P.nod = damp(P.nod, inp.up && sp >= 7.5 ? -0.45 : 0, 6, dt);
+      P.nod = damp(P.nod, inp.up && (P.upT >= 1.25 || sp >= 18) ? -0.3 : 0, 6, dt);
       // butters: weight onto the tips (tails come up) or back onto the tails
       pitch = phys.butterPitch;
       if (phys.butter) {
@@ -1236,64 +1315,57 @@ export class RiderModel {
         handF = [0.2, 0.32, -0.6]; handR = [0.2, 0.3, 0.6];
       }
     } else if (st === 'air') {
-      const at = phys.airTime;
-      const spin = phys.spinVel, spinning = Math.abs(spin) > 1.6;
+      // cork7's air poses (AIR_POSES), picked the way it picks them: by the keys being held.
+      // The flip key held: the flip pose (r), the spin key: the spin pose (i), both thrown
+      // at the lip: the cork pose; nothing held: standing tall, and over the last half
+      // second before touchdown opening up for the landing (E). The whole pose turns about
+      // the hips (hipPivot).
+      const spin = phys.spinVel;
       if (Math.abs(phys.spinAccum) > 1) P.lastSpinDir = Math.sign(phys.spinAccum);
       P.switchLook = 0;
-      const inverting = Math.abs(phys.flipVel) > 1.5 || Math.abs(phys.rollVel) > 1.5 || Math.abs(wrapPi(phys.flip)) > 0.6 || Math.abs(wrapPi(phys.roll)) > 0.6;
       const gy = phys.course.heightAt(phys.pos.x, phys.pos.z);
       const above = phys.pos.y - gy, falling = phys.vel.y < 0;
       const toClean = Math.abs(wrapPi(phys.heading - phys.travelHeading() - Math.round((phys.heading - phys.travelHeading()) / Math.PI) * Math.PI));
-      const pop = smooth(0, 0.22, at);
-      // pop: the knees come up a little, skis level and together, arms forward
-      hip = 0.78 - pop * 0.12; leanX = 0.32; lift2 = pop * 0.1; sep = 0.085;
-      handF = [0.3, 0.2, -0.4]; handR = [0.3, 0.2, 0.4];
-      poleL = [-0.8, -0.65, -0.3]; poleR = [-0.8, -0.65, 0.3];
-      const winding = Math.abs(phys.spinIn) > 0.25 || Math.abs(phys.flipIn) > 0.25 || Math.abs(phys.rollIn) > 0.25;
-      if (spinning) {
-        // compact: knees up, fists in, shoulders and head lead the spin
-        const s = Math.min(1, Math.abs(spin) / 5);
-        hip = 0.62; lift2 = 0.16; leanX = 0.42;
-        handF = [0.32, 0.22, -0.18]; handR = [0.32, 0.22, 0.18];
-        twist = Math.sign(spin) * (0.35 + 0.2 * s);
-        headYaw = Math.sign(spin) * (0.45 + 0.25 * s);
-        poleL = [-0.9, -0.4, -0.15]; poleR = [-0.9, -0.4, 0.15];
-        // let go: arms out wide and legs long, the body opens and the spin slows
-        if (!winding) { hip = 0.72; lift2 = 0.08; handF = [0.25, 0.3, -0.62]; handR = [0.25, 0.3, 0.62]; poleL = [-0.6, -0.7, -0.5]; poleR = [-0.6, -0.7, 0.5]; twist *= 0.5; }
-      }
-      if (inverting) {
-        // backflip: head and shoulders go back first; front flip: chest dives forward
-        hip = winding ? 0.5 : 0.62; lift2 = winding ? 0.26 : 0.14;
-        leanX = phys.flipVel < -0.5 ? 1.1 : phys.flipVel > 0.5 ? 0.45 : 0.8;
-        leanZ = THREE.MathUtils.clamp(phys.rollVel * 0.08, -0.4, 0.4);
-        handF = winding ? [0.36, 0.1, -0.2] : [0.25, 0.3, -0.6]; handR = winding ? [0.36, 0.1, 0.2] : [0.25, 0.3, 0.6];
-      }
-      const spotting = falling && toClean < 1.1 && above < 4;
+      const flipK = Math.min(1, Math.abs(phys.flipIn)), spinK = Math.min(1, Math.abs(phys.spinIn)), rollK = Math.min(1, Math.abs(phys.rollIn));
+      const held = flipK > 0.05 || spinK > 0.05 || rollK > 0.05 || !!phys.grab;
+      const E = held ? 0 : 1 - smooth(0.1, 0.55, phys.landAt.t);
+      P.cork = damp(P.cork ?? 0, phys.offAxis ? 1 : 0, 8, dt);
+      const r = flipK * (1 - E), i = spinK * (1 - E), t = 1 - 0.75 * E, c = P.cork * r * i;
+      const left = phys.spinIn >= 0;
+      const rest = t * (1 - r) * (1 - i), roll = rest * rollK * 0.7;
+      const A = AIR_POSES;
+      const pose = blendPoses([
+        [A.ready, 0.75 * E],
+        [left ? A.cork : A.corkRight, t * c],
+        [phys.flipIn < 0 ? A.front : A.back, t * (r - c)],
+        [left ? A.spin : A.spinRight, t * (1 - r) * i],
+        [A.front, roll],
+        [A.air, rest - roll],
+      ]);
+      hip = pose.hip; lift2 = pose.lift2; leanX = pose.lean; sep = pose.sep; hipX = 0; elbow = pose.elbow;
+      twist = pose.twist; headYaw = pose.head;
+      handF = pose.handF; handR = pose.handR; poleL = pose.poleL; poleR = pose.poleR;
+      for (const s of skiT) { s.pitch = pose.pitch; s.dx = pose.dx; }
+      const spotting = falling && toClean < 1.1 && above < 4 && r < 0.5;
       if (spotting) {
         // spot the landing: coming round to land switch, look back over the leading shoulder
         const back = wrapPi(phys.travelHeading() - phys.heading);
         if (Math.abs(back) > Math.PI / 2) ({ waist, twist, headYaw } = lookOver(back, P.lastSpinDir || Math.sign(back) || 1));
         else { headYaw = THREE.MathUtils.clamp(back, -1.3, 1.3); twist = -Math.sign(spin) * 0.12 * (1 - toClean); }
       }
-      const reach = falling ? smooth(2.2, 0.5, above) : 0;
-      if (!inverting) {
-        hip = THREE.MathUtils.lerp(hip, 0.8, reach); lift2 = THREE.MathUtils.lerp(lift2, 0, reach);
-        leanX = THREE.MathUtils.lerp(leanX, 0.34, reach);
-        handF = handF.map((x, i) => THREE.MathUtils.lerp(x, [0.42, 0.22, -0.45][i], reach));
-        handR = handR.map((x, i) => THREE.MathUtils.lerp(x, [0.42, 0.22, 0.45][i], reach));
-      }
-      P.nod = damp(P.nod, spotting || reach > 0.3 ? 0.25 : 0, 6, dt);
+      P.nod = damp(P.nod, pose.nod, 10, dt);
       if (phys.grab) {
         grab = SKI_GRABS[phys.grab.name];
         const tweak = smooth(0.35, 1.2, phys.grab.time);
-        hip = grab.hip - tweak * 0.04; lift2 = grab.lift + tweak * 0.04; leanX = grab.lean[0]; leanZ = grab.lean[1] * (1 + tweak * 0.3);
+        for (const s of skiT) { s.pitch = 0; s.dx = 0; }
+        hip = grab.hip - tweak * 0.04; lift2 = grab.lift + tweak * 0.05; leanX = grab.lean[0]; leanZ = grab.lean[1] * (1 + tweak * 0.3);
         for (let i = 0; i < 2; i++) {
           const s = grab.skis?.[i];
-          if (s) { skiT[i].yaw = s[0] * (1 + tweak * 0.5); skiT[i].pitch = s[1] * (1 + tweak * 0.5); skiT[i].dy = s[2] ?? 0; }
+          if (s) { skiT[i].yaw = s[0] * (1 + tweak * 0.3); skiT[i].pitch = s[1] * (1 + tweak * 0.3); skiT[i].dy = s[2] ?? 0; }
         }
-        // the free hand goes up and out for style
-        if (!grab.hands.l) handF = [-0.1, 0.55 + tweak * 0.1, -0.5];
-        if (!grab.hands.r) handR = [-0.1, 0.55 + tweak * 0.1, 0.5];
+        // the free arm goes out wide at shoulder height, for style and to show the grab off
+        if (!grab.hands.l) handF = [-0.05, 0.42 + tweak * 0.1, -0.74];
+        if (!grab.hands.r) handR = [-0.05, 0.42 + tweak * 0.1, 0.74];
       }
       P.grab = damp(P.grab, phys.grab ? 1 : 0, phys.grab ? 16 : 10, dt);
     } else if (st === 'grind') {
@@ -1335,10 +1407,11 @@ export class RiderModel {
     this.blend(dt, tg, st === 'air' ? 14 : st === 'crash' ? 18 : 10);
     P.lift = damp(P.lift, st === 'air' || st === 'crash' ? 0 : Math.abs(Math.sin(P.pitch)) * SKI_CONTACT, 14, dt);
     P.sep = damp(P.sep ?? SKI_SEP, sep, 8, dt);
+    P.elbow = damp(P.elbow ?? 0.6, elbow, 10, dt);
     P.poleL = (P.poleL ?? new THREE.Vector3(...poleL)).lerp(v1.set(...poleL), 1 - Math.exp(-10 * dt));
     P.poleR = (P.poleR ?? new THREE.Vector3(...poleR)).lerp(v1.set(...poleR), 1 - Math.exp(-10 * dt));
-    P.skiT = P.skiT ?? [{ yaw: 0, pitch: 0, dy: 0 }, { yaw: 0, pitch: 0, dy: 0 }];
-    for (let i = 0; i < 2; i++) for (const key of ['yaw', 'pitch', 'dy']) P.skiT[i][key] = damp(P.skiT[i][key], skiT[i][key], 12, dt);
+    P.skiT = P.skiT ?? [{ yaw: 0, pitch: 0, dy: 0, dx: 0 }, { yaw: 0, pitch: 0, dy: 0, dx: 0 }];
+    for (let i = 0; i < 2; i++) for (const key of ['yaw', 'pitch', 'dy', 'dx']) P.skiT[i][key] = damp(P.skiT[i][key] ?? 0, skiT[i][key], 12, dt);
     this.springArms(dt, st, handF, handR);
 
     // Each ski: under its foot, raised when the knees come up, on edge with the inside ski
@@ -1350,7 +1423,7 @@ export class RiderModel {
       const z = (i ? 1 : -1) * P.sep;
       const s = this.skis[i];
       const t = P.skiT[i];
-      s.position.set(0, P.lift + P.lift2 + t.dy - z * tanPhi, z);
+      s.position.set(t.dx, P.lift + P.lift2 + t.dy - z * tanPhi, z);
       s.quaternion.setFromEuler(new THREE.Euler(0, t.yaw, P.pitch + t.pitch, 'YZX'));
       s.updateMatrix();
       const ankle = new THREE.Vector3(-F.ankleBack, SKI_TOP_Y + BIND_H + F.ankleH, 0).applyMatrix4(s.matrix);
@@ -1377,7 +1450,7 @@ export class RiderModel {
     if (st !== 'air') P.grab = 0;
     return {
       hipC, spine, legs,
-      arms: [{ side: 'l', hand: handFT, pole: new THREE.Vector3(-0.3, -1, -0.6) }, { side: 'r', hand: handRT, pole: new THREE.Vector3(-0.3, -1, 0.6) }],
+      arms: [{ side: 'l', hand: handFT, pole: new THREE.Vector3(-0.3, -1, -P.elbow) }, { side: 'r', hand: handRT, pole: new THREE.Vector3(-0.3, -1, P.elbow) }],
     };
   }
 

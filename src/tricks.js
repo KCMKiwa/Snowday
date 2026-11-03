@@ -48,8 +48,20 @@ function heldGrabs(grabs) {
   return out;
 }
 
+const OFF_AXIS = { cork: 'Cork', bio: 'Bio', rodeo: 'Rodeo', misty: 'Misty', flatspin: 'Flatspin' };
+
+// An off-axis trick (thrown spin + flip/roll) is named from what the body actually did: the
+// rotation about its tilted axis and how many times it really went over. A bio is a skier's
+// forward cork; on a snowboard it is called a cork as well.
+export function offAxisName(type, deg, inversions, spinDir, takeoffSwitch, gear) {
+  const mult = MULTI[Math.min(Math.max(1, inversions) - 1, 3)];
+  const kind = type === 'bio' && gear !== 'ski' ? 'Cork' : OFF_AXIS[type];
+  return `${sideName(spinDir, takeoffSwitch, gear)} ${mult}${kind} ${deg}`;
+}
+
 export function describeAir(e) {
-  const deg = e.spinDeg, flips = e.flips, rolls = e.rolls || 0;
+  const off = e.offAxis && e.inversions >= 1;
+  const deg = off ? e.offDeg : e.spinDeg, flips = off ? e.inversions : e.flips, rolls = off ? 0 : e.rolls || 0;
   const inv = flips + rolls;
   const grab = mainGrab(e.grabs);
   const held = heldGrabs(e.grabs);
@@ -58,13 +70,18 @@ export function describeAir(e) {
   const shifty = !inv && deg === 0 && (e.spinPeak || 0) >= 0.85;
   let name = '';
 
-  if (inv > 0) {
+  if (off) {
+    name = offAxisName(e.offAxis, deg, e.inversions, e.spinDir, e.takeoffSwitch, e.gear);
+  } else if (inv > 0) {
     const mult = MULTI[Math.min(inv - 1, 3)];
     if (deg >= 180) {
-      const kind = rolls > flips ? 'Cork' : e.flipDir > 0 ? 'Rodeo' : 'Misty';
+      // off-axis spins: backflip-based ones are corks when the spin dominates (540+ per
+      // inversion), rodeos when the flip does; frontflip-based ones are mistys; a spin with
+      // the roll (nose-over-tail on a board, sideways on skis) is a flatspin
+      const kind = rolls > flips ? 'Flatspin' : e.flipDir > 0 ? (deg >= 540 * inv ? 'Cork' : 'Rodeo') : 'Misty';
       name = `${side} ${mult}${kind} ${deg}`;
     } else if (rolls > flips) {
-      name = mult + (ski ? 'Lincoln Loop' : e.rollDir > 0 ? 'Wildcat' : 'Tamedog');
+      name = mult + (ski ? 'Lincoln Loop' : 'Cartwheel');
     } else {
       name = mult + (e.flipDir > 0 ? 'Backflip' : 'Frontflip');
     }

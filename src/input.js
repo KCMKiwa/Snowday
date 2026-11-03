@@ -29,19 +29,24 @@ export class Input {
   wasPressed(...codes) { return codes.some((c) => this.pressed.has(c)); }
 
   // Snapshot for this frame; call endFrame() afterwards to clear edges.
+  // The air keys are cork7's: A/D spin, W/S flip, ← / → roll, ↑ over the top.
   state() {
-    const left = this.has('KeyA', 'ArrowLeft'), right = this.has('KeyD', 'ArrowRight');
+    const left = this.has('KeyA'), right = this.has('KeyD');
     const g = this.grabOrder[this.grabOrder.length - 1];
     const t = this.touch;
     return {
       steer: (left ? 1 : 0) - (right ? 1 : 0) || (t ? t.steer : 0),
-      up: this.has('KeyW', 'ArrowUp') || !!t?.up,
-      down: this.has('KeyS', 'ArrowDown') || !!t?.down,
+      up: this.has('KeyW') || !!t?.up,
+      down: this.has('KeyS') || !!t?.down,
       jumpHeld: this.has('Space') || !!t?.jump,
       jumpReleased: this.released.has('Space') || !!t?.jumpReleased,
-      // Q / E: tail / nose press (butters on snow, presses on rails, rolls in the air)
+      // Q / E: tail / nose press (butters on snow, presses on rails)
       nose: this.has('KeyE') || !!t?.nose,
       tail: this.has('KeyQ') || !!t?.tail,
+      // ← / →: roll in the air (touch: TAIL / NOSE)
+      roll: (this.has('ArrowLeft') ? 1 : 0) - (this.has('ArrowRight') ? 1 : 0) || (t ? (t.tail ? 1 : 0) - (t.nose ? 1 : 0) : 0),
+      // ↑: with a spin and a flip off the lip, the feet go over the head (rodeo, misty)
+      over: this.has('ArrowUp') || !!t?.over,
       grab: g ? GRAB_KEYS[g] : t?.grab ?? null,
     };
   }
@@ -53,4 +58,4 @@ export class Input {
   }
 }
 
-export const IDLE_INPUT = { steer: 0, up: false, down: false, jumpHeld: false, jumpReleased: false, nose: false, tail: false, grab: null };
+export const IDLE_INPUT = { steer: 0, up: false, down: false, jumpHeld: false, jumpReleased: false, nose: false, tail: false, roll: 0, over: false, grab: null };

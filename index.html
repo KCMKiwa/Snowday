@@ -45,6 +45,13 @@
   }
 
   /* ---------- overlays ---------- */
+  .errbar {
+    position: fixed; left: 50%; top: 12px; z-index: 50; transform: translateX(-50%); max-width: calc(100vw - 32px); box-sizing: border-box;
+    display: flex; flex-direction: column; gap: 2px; padding: 10px 16px; background: #ff4d5e; color: #fff; border: 3px solid #000; box-shadow: 5px 5px 0 #000;
+    font-family: var(--ui); font-size: 0.9rem;
+  }
+  .errbar span { font-family: ui-monospace, monospace; font-size: 0.82rem; }
+  .errbar small { opacity: 0.9; }
   .overlay { position: fixed; inset: 0; z-index: 10; }
   #loading { display: grid; place-items: center; background: var(--ink); z-index: 30; transition: opacity .5s; }
   #loading .wordmark { font-family: var(--display); font-size: clamp(3rem, 10vw, 6.5rem); font-style: italic; transform: skewX(-10deg); letter-spacing: 0.01em; line-height: 0.9; }
@@ -52,48 +59,172 @@
   #loading p { text-align: center; color: var(--mist); margin: 0.8rem 0 0; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 600; font-size: 0.85rem; }
   #loading.fade { opacity: 0; pointer-events: none; }
 
-  /* ---------- menu ---------- */
-  #menu { pointer-events: none; }
-  .menu-bg {
-    position: absolute; inset: 0;
-    background:
-      repeating-linear-gradient(-62deg, rgba(255,255,255,0.035) 0 2px, transparent 2px 16px),
-      linear-gradient(90deg, rgba(7,7,12,0.96) 0%, rgba(7,7,12,0.9) 32%, rgba(7,7,12,0.25) 52%, rgba(7,7,12,0) 64%);
+  /* ---------- menu ----------
+     A fighting-game front end in the manner of 2XKO: a home screen of three huge skewed
+     buttons with hard black outlines and offset colour shadows, sticker and tape accents,
+     halftone dots, diagonal colour slashes and a scrolling ticker. Play, Locker and Shop open
+     as pages on the same frame; the 3D rider stands full-bleed on the right. Skewed boxes are
+     made with transform (not clip-path) so their outlines and hard shadows show. */
+  #menu { pointer-events: none; --grape: #7b3cff; --edge: min(600px, 46vw); --gut: max(34px, env(safe-area-inset-left, 0px)); --foot: max(10px, env(safe-area-inset-bottom, 0px)); }
+  #menu .screen > *, #menu .chips, #menu .cta { pointer-events: auto; }
+  .menu-bg { position: absolute; inset: 0; overflow: hidden; background: linear-gradient(90deg, rgba(7,7,12,0.97) 0%, rgba(7,7,12,0.9) 34%, rgba(7,7,12,0.3) 52%, rgba(7,7,12,0) 66%); }
+  .menu-bg .dots {
+    position: absolute; inset: 0; background: radial-gradient(circle, rgba(244,245,251,0.17) 1.3px, transparent 1.9px) 0 0 / 11px 11px;
+    -webkit-mask-image: linear-gradient(118deg, #000 0%, transparent 44%); mask-image: linear-gradient(118deg, #000 0%, transparent 44%);
   }
-  /* magenta slash cutting down behind the rail */
-  .menu-bg::before {
-    content: ""; position: absolute; top: 0; bottom: 0; left: min(500px, 40vw); width: 90px;
-    background: linear-gradient(180deg, var(--hot) 0%, var(--hot-deep) 100%);
-    clip-path: polygon(48px 0, 90px 0, 42px 100%, 0 100%); opacity: 0.9;
-  }
-  .menu-bg::after {
-    content: ""; position: absolute; top: 0; bottom: 0; left: calc(min(500px, 40vw) + 76px); width: 40px;
-    background: var(--volt); clip-path: polygon(30px 0, 36px 0, 6px 100%, 0 100%);
-  }
+  .menu-bg .slash { position: absolute; top: -12%; bottom: -12%; transform: skewX(-13deg); }
+  .menu-bg .s1 { left: var(--edge); width: 44px; background: var(--hot); box-shadow: 0 0 0 3px #000; }
+  .menu-bg .s2 { left: calc(var(--edge) + 62px); width: 9px; background: var(--volt); }
+  .menu-bg .s3 { left: calc(var(--edge) - 110px); width: 84px; background: linear-gradient(180deg, var(--grape) 0%, transparent 72%); opacity: 0.6; }
 
   .topbar {
-    position: absolute; top: 0; left: 0; right: 0; pointer-events: none;
-    padding: max(18px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-right, 0px)) 0 max(28px, env(safe-area-inset-left, 0px));
-    display: flex; justify-content: flex-end; gap: 16px;
+    position: absolute; top: 0; left: 0; right: 0; z-index: 3; pointer-events: none; display: flex; justify-content: space-between; align-items: center; gap: 16px;
+    padding: max(16px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-right, 0px)) 0 var(--gut);
   }
-  .topmeta { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  .brand { font-family: var(--display); font-size: 1.8rem; line-height: 1; transform: skewX(-10deg); letter-spacing: 0.01em; }
+  .brand b { font-weight: 400; color: var(--ink); background: var(--hot); padding: 0.04em 0.12em 0; margin-left: 0.05em; box-shadow: 3px 3px 0 var(--volt); }
+  #menu[data-screen="home"] .brand { visibility: hidden; }
+  .chips { display: flex; gap: 12px; }
+  .chip {
+    display: flex; align-items: center; gap: 10px; padding: 5px 18px 5px 14px; transform: skewX(-12deg);
+    background: var(--ink-2); border: 3px solid #000; box-shadow: 4px 4px 0 #000;
+    font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.8rem;
+  }
+  .chip i { font-style: normal; color: var(--ink); background: var(--cyan); padding: 1px 8px; }
+  .chip b { font-family: var(--display); font-weight: 400; font-size: 1.25rem; letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+  .chip.flakes { background: var(--volt); color: var(--ink); box-shadow: 4px 4px 0 var(--hot), 4px 4px 0 3px #000; }
+  .chip.flakes i { background: none; color: var(--ink); font-size: 1.1rem; padding: 0; }
+  .chip.flakes.bump { animation: bump .5s cubic-bezier(.2,1.6,.3,1); }
+  @keyframes bump { 0% { transform: skewX(-12deg) scale(1.25); } 100% { transform: skewX(-12deg); } }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  .screen { position: absolute; inset: 0; pointer-events: none; }
+  .home .logo { position: absolute; left: var(--gut); top: calc(max(16px, env(safe-area-inset-top, 0px)) + 6vh); }
+  .logo { font-family: var(--display); font-weight: 400; font-size: clamp(3.4rem, 8vh, 5.6rem); line-height: 0.86; margin: 0; transform: skewX(-10deg); transform-origin: left; letter-spacing: 0.005em; }
+  .logo span { color: var(--ice); -webkit-text-stroke: 2px #000; paint-order: stroke fill; }
+  .logo b { display: inline-block; line-height: 1; font-weight: 400; color: var(--ink); background: var(--hot); padding: 0.04em 0.12em 0; margin-left: 0.04em; border: 3px solid #000; box-shadow: 7px 7px 0 var(--volt), 7px 7px 0 3px #000; }
+
+  .home-nav { position: absolute; left: calc(var(--gut) + 8px); top: 54%; transform: translateY(-46%); display: flex; flex-direction: column; gap: 18px; }
+  .nav-btn {
+    position: relative; display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 16px;
+    width: min(520px, 40vw); padding: 6px 54px 9px 20px; text-align: left; color: var(--ice);
+    background: rgba(20,20,32,0.92); border: 3px solid #000; box-shadow: 6px 6px 0 rgba(0,0,0,0.55);
+    transform: skewX(-12deg); transition: transform .16s cubic-bezier(.2,1.4,.3,1), background .1s, color .1s, box-shadow .16s;
+  }
+  .nav-btn .idx { grid-row: span 2; font-style: normal; font-family: var(--display); font-size: 1.05rem; line-height: 1; color: var(--hot); background: #000; padding: 5px 8px 3px; }
+  .nav-btn .label { font-family: var(--display); font-size: clamp(2.9rem, 8.4vh, 5.4rem); line-height: 0.95; text-transform: uppercase; letter-spacing: 0.015em; }
+  .nav-btn small { grid-column: 2; font-weight: 700; font-size: 0.76rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--mist); }
+  .nav-btn::after { content: "▶"; position: absolute; right: 20px; top: 50%; font-size: 1.5rem; opacity: 0; transform: translate(-12px, -50%); transition: transform .16s, opacity .16s; }
+  .nav-btn[aria-current="true"] { background: var(--volt); color: var(--ink); transform: skewX(-12deg) translateX(24px); box-shadow: 10px 10px 0 var(--hot), 10px 10px 0 3px #000; }
+  .nav-btn[aria-current="true"] small { color: var(--ink); }
+  .nav-btn[aria-current="true"] .idx { color: var(--volt); }
+  .nav-btn[aria-current="true"]::after { opacity: 1; transform: translate(0, -50%); }
+  /* a strip of tape on the picked button */
+  .nav-btn[aria-current="true"]::before { content: ""; position: absolute; left: -16px; top: -13px; width: 70px; height: 20px; background: rgba(244,245,251,0.78); transform: rotate(-9deg); box-shadow: 0 1px 2px rgba(0,0,0,0.35); }
+  .nav-btn:active { transform: skewX(-12deg) translate(30px, 5px); box-shadow: 4px 4px 0 var(--hot), 4px 4px 0 3px #000; }
+  /* (the picked button is the keyboard focus: it follows it, so the volt slab is the focus mark) */
+  .nav-btn:focus-visible, .page:focus { outline: none; }
+  .sticker {
+    position: absolute; right: -54px; top: -64px; width: 92px; height: 92px; border-radius: 50%; display: grid; place-content: center; text-align: center;
+    background: var(--hot); color: var(--ink); border: 3px solid #000; box-shadow: 5px 5px 0 #000; transform: rotate(12deg); pointer-events: none;
+  }
+  .sticker small { font-weight: 700; font-size: 0.66rem; letter-spacing: 0.16em; text-transform: uppercase; }
+  .sticker b { font-family: var(--display); font-weight: 400; font-size: 2.2rem; line-height: 0.9; color: var(--ice); -webkit-text-stroke: 2px #000; paint-order: stroke fill; }
+
+  .page {
+    box-sizing: border-box; width: var(--edge); min-width: 340px; display: flex; flex-direction: column; gap: 12px;
+    padding: calc(max(16px, env(safe-area-inset-top, 0px)) + 52px) 22px calc(var(--foot) + 120px) var(--gut);
+  }
+  .page > * { pointer-events: auto; }
+  .page.wide { width: min(1040px, 66vw); }
+  .page-head { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+  .back {
+    display: inline-flex; align-items: center; gap: 8px; padding: 4px 16px 4px 10px; transform: skewX(-12deg);
+    background: var(--ink-3); border: 3px solid #000; box-shadow: 4px 4px 0 #000; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  .back::before { content: "◀"; color: var(--hot); }
+  .back:hover { background: var(--hot); }
+  .back:hover::before { color: var(--ink); }
+  .page-title {
+    margin: 0; display: flex; align-items: flex-start; gap: 12px; font-family: var(--display); font-weight: 400; font-size: clamp(3.2rem, 9vh, 5.6rem); line-height: 0.86;
+    text-transform: uppercase; transform: skewX(-10deg); transform-origin: left; color: var(--volt);
+    -webkit-text-stroke: 3px #000; paint-order: stroke fill; text-shadow: 6px 6px 0 var(--hot);
+  }
+  .page-title i { font-style: normal; font-size: 1rem; line-height: 1; background: #000; color: var(--hot); padding: 5px 8px 3px; margin-top: 6px; -webkit-text-stroke: 0; text-shadow: none; }
+  .page-body {
+    flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 18px;
+    padding: 8px 14px 10px 4px; scrollbar-width: thin; scrollbar-color: var(--hot) transparent;
+  }
+  .topmeta { display: flex; flex-wrap: wrap; gap: 6px; }
   .topmeta span {
-    font-weight: 700; font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase;
-    background: rgba(7,7,12,0.72); border-left: 3px solid var(--cyan); padding: 5px 12px 5px 10px;
+    font-weight: 700; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase;
+    background: rgba(7,7,12,0.72); border-left: 3px solid var(--cyan); padding: 4px 12px 4px 10px;
     clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
   }
   .topmeta span:first-child { background: var(--cyan); color: var(--ink); border-color: var(--ink); }
 
-  .rail {
-    position: absolute; top: 0; bottom: 0; left: 0; pointer-events: auto;
-    width: min(500px, 40vw); min-width: 340px; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain;
-    padding: max(22px, env(safe-area-inset-top, 0px)) 18px 150px max(28px, env(safe-area-inset-left, 0px));
-    display: flex; flex-direction: column; gap: 18px; scrollbar-width: thin; scrollbar-color: var(--hot) transparent;
+  /* the shop: cards with a hard shadow in the item's colour */
+  /* a page that runs on past the bottom fades out there (it scrolls) */
+  .page-body { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 34px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 34px), transparent); padding-bottom: 34px; }
+  /* the locker in two columns: rider and outfit, then the board or skis */
+  #scrLocker .page-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 18px 24px; }
+  @media (max-width: 1150px) { #scrLocker .page-body { display: flex; } }
+  .shop-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+  .shop-note { margin: 0; color: var(--mist); font-size: 0.8rem; font-weight: 600; letter-spacing: 0.03em; }
+  .shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px 18px; padding: 4px 12px 12px 6px; }
+  .item {
+    position: relative; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px 14px;
+    background: linear-gradient(160deg, var(--ink-3), var(--ink-2)); border: 3px solid #000; box-shadow: 7px 7px 0 var(--item, var(--hot)), 7px 7px 0 3px #000;
+    transform: skewX(-4deg); transition: transform .14s cubic-bezier(.2,1.4,.3,1);
   }
-  .logo { font-family: var(--display); font-weight: 400; font-size: clamp(3.4rem, 6vw, 5.4rem); line-height: 0.86; margin: 0 0 2px; transform: skewX(-10deg); transform-origin: left; letter-spacing: 0.005em; }
-  .logo span { color: var(--ice); }
-  .logo b { display: inline-block; line-height: 1; font-weight: 400; color: var(--ink); background: var(--hot); padding: 0.02em 0.12em 0; margin-left: 0.04em; box-shadow: 6px 6px 0 var(--volt); }
-  .tagline { margin: 20px 0 0; color: var(--mist); font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; font-size: 0.74rem; }
+  .item > * { transform: skewX(4deg); }
+  .item:hover { transform: skewX(-4deg) translateY(-3px); }
+  .item-art {
+    height: 96px; display: grid; place-items: center; overflow: hidden;
+    background: repeating-linear-gradient(-62deg, rgba(255,255,255,0.045) 0 2px, transparent 2px 12px), #0d0d16;
+  }
+  .item-art canvas { width: 100%; height: auto; display: block; }
+  .item-name { font-family: var(--display); font-weight: 400; font-size: 1.4rem; line-height: 1; letter-spacing: 0.03em; text-transform: uppercase; }
+  .item-tag { margin: -4px 0 0; color: var(--mist); font-size: 0.8rem; }
+  .item .buy {
+    margin-top: 2px; display: flex; justify-content: center; align-items: baseline; gap: 8px; padding: 7px 12px 6px;
+    border: 3px solid #000; background: var(--volt); color: var(--ink); box-shadow: 4px 4px 0 #000; transform: skewX(-10deg);
+    font-weight: 700; font-size: 0.85rem; letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .item .buy b { font-family: var(--display); font-weight: 400; font-size: 1.15rem; letter-spacing: 0.03em; }
+  .item .buy.equip { background: var(--cyan); }
+  .item .buy:disabled { background: var(--ink-3); color: var(--mist); box-shadow: none; cursor: default; }
+  .item .buy:not(:disabled):hover { filter: brightness(1.1); }
+  .item .buy:not(:disabled):active { transform: skewX(-10deg) translate(2px, 2px); box-shadow: 2px 2px 0 #000; }
+  .item[data-state="equipped"]::after {
+    content: "Ausgerüstet"; position: absolute; right: -10px; top: -12px; padding: 3px 10px 2px; transform: rotate(6deg);
+    background: var(--hot); color: var(--ice); border: 2px solid #000; font-weight: 700; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  .item[data-state="locked"] .item-art { filter: saturate(0.35) brightness(0.8); }
+  .item.bought { animation: bought .6s cubic-bezier(.2,1.5,.3,1); }
+  @keyframes bought { 0% { transform: skewX(-4deg) scale(1.08); filter: brightness(1.8); } 100% { transform: skewX(-4deg); filter: none; } }
+  /* an outfit as a little figure: helmet with goggles, jacket, pants */
+  .fit { position: relative; width: 64px; height: 86px; }
+  .fit i { position: absolute; left: 50%; transform: translateX(-50%); border: 2px solid #000; box-sizing: border-box; }
+  .fit .h { top: 0; width: 26px; height: 22px; border-radius: 13px 13px 5px 5px; background: var(--h); }
+  .fit .l { top: 9px; width: 24px; height: 8px; border-radius: 3px; background: var(--l); border-width: 1.5px; }
+  .fit .j { top: 21px; width: 50px; height: 34px; border-radius: 10px 10px 3px 3px; background: linear-gradient(180deg, transparent 58%, var(--a) 58% 72%, transparent 72%), var(--j); }
+  .fit .p { top: 54px; width: 36px; height: 32px; border-radius: 2px 2px 4px 4px; background: linear-gradient(90deg, var(--p) 0 46%, #000 46% 54%, var(--p) 54%); }
+  .more { align-self: flex-start; margin-top: 6px; border: 0; background: none; padding: 2px 0; color: var(--cyan); font-weight: 700; font-size: 0.8rem; letter-spacing: 0.12em; text-transform: uppercase; }
+  .more:hover { color: var(--volt); }
+
+  .hints {
+    position: absolute; left: var(--gut); bottom: calc(var(--foot) + 50px); display: flex; gap: 18px; flex-wrap: wrap;
+    font-weight: 700; font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--mist); pointer-events: none;
+  }
+  .hints span { display: inline-flex; align-items: center; gap: 6px; }
+  .ticker {
+    position: absolute; left: -3%; right: -3%; bottom: var(--foot); height: 30px; overflow: hidden; pointer-events: none;
+    background: var(--volt); color: var(--ink); border-top: 3px solid #000; border-bottom: 3px solid #000; transform: rotate(-1deg);
+  }
+  .ticker div { display: flex; align-items: center; gap: 22px; width: max-content; white-space: nowrap; animation: ticker 34s linear infinite; font-family: var(--display); font-size: 1.1rem; line-height: 24px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .ticker i { font-style: normal; color: var(--hot); }
+  @keyframes ticker { to { transform: translateX(-50%); } }
 
   .block { display: flex; flex-direction: column; gap: 10px; }
   .tag {
@@ -132,6 +263,8 @@
   }
   .swatch[aria-pressed="true"] { outline: none; transform: translateY(-2px); }
   .swatch[aria-pressed="true"]::after { content: ""; position: absolute; left: 4px; right: 4px; bottom: 0; height: 4px; background: var(--volt); }
+  /* not bought yet: striped over, opens the shop */
+  .swatch.locked { opacity: 0.6; background: repeating-linear-gradient(45deg, rgba(7,7,12,0.75) 0 3px, transparent 3px 7px), linear-gradient(135deg, var(--a) 0 58%, var(--b) 58% 100%); }
   .swatch-row { display: flex; align-items: center; gap: 12px; }
   .swatch-row .label { margin: 0; }
 
@@ -172,35 +305,38 @@
 
   /* the selected rider's name, huge and outlined, running down the right edge */
   .fighter {
-    position: absolute; right: max(10px, env(safe-area-inset-right, 0px)); top: 70px; bottom: 120px; pointer-events: none;
+    position: absolute; right: max(10px, env(safe-area-inset-right, 0px)); top: 64px; bottom: 110px; pointer-events: none;
     display: flex; align-items: center; justify-content: center;
   }
   .fighter span {
     writing-mode: vertical-rl; transform: rotate(180deg) skewY(8deg);
-    font-family: var(--display); font-size: clamp(5rem, 14vh, 10rem); line-height: 0.8; letter-spacing: 0.02em; text-transform: uppercase;
-    color: transparent; -webkit-text-stroke: 2px rgba(255,45,120,0.85);
-    text-shadow: 6px 0 0 rgba(215,255,58,0.25);
+    font-family: var(--display); font-size: clamp(5rem, 15vh, 11rem); line-height: 0.8; letter-spacing: 0.02em; text-transform: uppercase;
+    color: transparent; -webkit-text-stroke: 2px rgba(255,45,120,0.9);
+    text-shadow: 7px 0 0 rgba(215,255,58,0.28), 14px 0 0 rgba(123,60,255,0.22);
   }
-  .rider-card { position: absolute; right: calc(max(10px, env(safe-area-inset-right, 0px)) + 150px); bottom: 150px; pointer-events: none; text-align: right; }
-  .rider-card b { display: block; font-family: var(--display); font-weight: 400; font-size: 2.6rem; line-height: 0.9; letter-spacing: 0.03em; text-transform: uppercase; font-style: italic; text-shadow: 3px 3px 0 var(--hot); }
-  .rider-card small { font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; font-size: 0.72rem; color: var(--ink); background: var(--volt); padding: 3px 10px; clip-path: var(--slant-s); display: inline-block; margin-top: 6px; }
+  .rider-card { position: absolute; right: calc(max(10px, env(safe-area-inset-right, 0px)) + 160px); bottom: calc(var(--foot) + 70px); pointer-events: none; text-align: right; }
+  .rider-card b { display: block; font-family: var(--display); font-weight: 400; font-size: 2.8rem; line-height: 0.9; letter-spacing: 0.03em; text-transform: uppercase; transform: skewX(-10deg); -webkit-text-stroke: 2px #000; paint-order: stroke fill; text-shadow: 4px 4px 0 var(--hot); }
+  .rider-card small { font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; font-size: 0.72rem; color: var(--ink); background: var(--volt); padding: 3px 10px; border: 2px solid #000; transform: skewX(-12deg); display: inline-block; margin-top: 8px; }
+  #menu[data-screen="shop"] .fighter, #menu[data-screen="shop"] .rider-card, #menu[data-screen="play"] .rider-card { display: none; }
 
   .cta {
-    position: absolute; right: max(24px, env(safe-area-inset-right, 0px)); bottom: max(24px, env(safe-area-inset-bottom, 0px));
-    pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+    position: absolute; right: max(26px, env(safe-area-inset-right, 0px)); bottom: calc(var(--foot) + 56px);
+    pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 12px;
   }
-  .start-wrap { filter: drop-shadow(7px 7px 0 var(--hot)); }
   .start {
-    display: flex; align-items: baseline; gap: 16px; border: 0; background: var(--volt); color: var(--ink);
-    clip-path: polygon(22px 0, 100% 0, calc(100% - 22px) 100%, 0 100%); padding: 14px 44px 12px 40px;
-    transition: transform .08s;
+    display: flex; align-items: baseline; gap: 16px; padding: 10px 46px 8px 38px; transform: skewX(-12deg);
+    background: var(--volt); color: var(--ink); border: 3px solid #000; box-shadow: 9px 9px 0 var(--hot), 9px 9px 0 3px #000;
+    transition: transform .1s, box-shadow .1s;
   }
-  .start span { font-family: var(--display); font-size: clamp(1.8rem, 3vw, 2.6rem); line-height: 1; letter-spacing: 0.04em; text-transform: uppercase; font-style: italic; }
+  .start span { font-family: var(--display); font-size: clamp(2.2rem, 4vw, 3.4rem); line-height: 1; letter-spacing: 0.03em; text-transform: uppercase; }
   .start small { font-weight: 700; font-size: 0.78rem; letter-spacing: 0.16em; text-transform: uppercase; animation: blink 1.2s steps(2, start) infinite; }
-  .start:hover { transform: translateX(-4px); }
-  .start:active { transform: translate(3px, 3px); }
+  .start:hover { transform: skewX(-12deg) translateX(-4px); }
+  .start:active { transform: skewX(-12deg) translate(5px, 5px); box-shadow: 4px 4px 0 var(--hot), 4px 4px 0 3px #000; }
   @keyframes blink { to { visibility: hidden; } }
-  .best { color: var(--ice); font-weight: 600; font-size: 0.85rem; letter-spacing: 0.08em; text-transform: uppercase; font-variant-numeric: tabular-nums; background: rgba(7,7,12,0.7); padding: 4px 12px; clip-path: var(--slant-s); }
+  .best { color: var(--ice); font-weight: 700; font-size: 0.82rem; letter-spacing: 0.08em; text-transform: uppercase; font-variant-numeric: tabular-nums; background: rgba(7,7,12,0.78); padding: 4px 12px; border-left: 3px solid var(--hot); }
+  .earned { display: inline-flex; align-self: flex-start; gap: 8px; align-items: baseline; padding: 4px 14px 3px; transform: skewX(-12deg); background: var(--volt); color: var(--ink); border: 3px solid #000; box-shadow: 4px 4px 0 var(--hot); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.8rem; }
+  .earned b { font-family: var(--display); font-weight: 400; font-size: 1.4rem; letter-spacing: 0.03em; }
+  .earned:empty { display: none; }
 
   /* ---------- HUD ---------- */
   #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
@@ -274,30 +410,144 @@
 
 
   /* ---------- menu motion ---------- */
-  #menu:not([hidden]) .menu-bg::before { animation: slash-in .55s cubic-bezier(.2,.9,.2,1) both; }
-  #menu:not([hidden]) .menu-bg::after { animation: slash-in .55s .08s cubic-bezier(.2,.9,.2,1) both; }
-  #menu:not([hidden]) .logo { animation: slam .6s .1s cubic-bezier(.2,1.4,.3,1) both; }
-  #menu:not([hidden]) .tagline { animation: rise .5s .3s ease-out both; }
-  #menu:not([hidden]) .rail > .block { animation: slide-in .55s cubic-bezier(.2,.9,.2,1) both; }
-  #menu:not([hidden]) .rail > .block:nth-of-type(1) { animation-delay: .18s; }
-  #menu:not([hidden]) .rail > .block:nth-of-type(2) { animation-delay: .26s; }
-  #menu:not([hidden]) .rail > .block:nth-of-type(3) { animation-delay: .34s; }
-  #menu:not([hidden]) .rail > .block:nth-of-type(4) { animation-delay: .42s; }
-  #menu:not([hidden]) .rail > .block:nth-of-type(5) { animation-delay: .5s; }
-  #menu:not([hidden]) .topmeta span { animation: drop .45s cubic-bezier(.2,1.3,.3,1) both; }
-  #menu:not([hidden]) .topmeta span:nth-child(2) { animation-delay: .06s; }
-  #menu:not([hidden]) .topmeta span:nth-child(3) { animation-delay: .12s; }
-  #menu:not([hidden]) .topmeta span:nth-child(4) { animation-delay: .18s; }
-  #menu:not([hidden]) .topmeta span:nth-child(5) { animation-delay: .24s; }
-  #menu:not([hidden]) .cta { animation: slide-left .6s .35s cubic-bezier(.2,.9,.2,1) both; }
-  .start-wrap { animation: pulse-shadow 2.4s 1s ease-in-out infinite; }
-  @keyframes slash-in { from { transform: translateY(-105%); } to { transform: none; } }
-  @keyframes slam { 0% { opacity: 0; transform: skewX(-10deg) scale(1.6) translateX(-30px); } 60% { opacity: 1; } 100% { transform: skewX(-10deg) scale(1); } }
+  #menu:not([hidden]) .slash { animation: slash-in .55s cubic-bezier(.2,.9,.2,1) both; }
+  #menu:not([hidden]) .s2 { animation-delay: .08s; }
+  #menu:not([hidden]) .s3 { animation-delay: .04s; }
+  #menu:not([hidden]) .chip { animation: drop .45s .1s cubic-bezier(.2,1.3,.3,1) both; }
+  #menu:not([hidden]) .chip + .chip { animation-delay: .16s; }
+  #menu:not([hidden]) .ticker { animation: rise .5s .3s ease-out both; }
+  .screen:not([hidden]) .logo { animation: slam .6s .05s cubic-bezier(.2,1.4,.3,1) both; }
+  .screen:not([hidden]) .nav-item { animation: slide-in .5s cubic-bezier(.2,.9,.2,1) both; }
+  .screen:not([hidden]) .nav-item:nth-child(1) { animation-delay: .12s; }
+  .screen:not([hidden]) .nav-item:nth-child(2) { animation-delay: .19s; }
+  .screen:not([hidden]) .nav-item:nth-child(3) { animation-delay: .26s; }
+  .screen:not([hidden]) .sticker { animation: stick .5s .45s cubic-bezier(.2,1.6,.3,1) both; }
+  .page:not([hidden]) .page-title { animation: slam .5s cubic-bezier(.2,1.4,.3,1) both; }
+  .page:not([hidden]) .back { animation: slide-in .4s cubic-bezier(.2,.9,.2,1) both; }
+  .page:not([hidden]) .page-body > * { animation: slide-in .5s cubic-bezier(.2,.9,.2,1) both; }
+  .page:not([hidden]) .page-body > :nth-child(2) { animation-delay: .07s; }
+  .page:not([hidden]) .page-body > :nth-child(3) { animation-delay: .14s; }
+  .shop-grid.fresh .item { animation: deal .42s cubic-bezier(.2,1.2,.3,1) both; animation-delay: calc(var(--n, 0) * 45ms); }
+  #playCta:not([hidden]) { animation: slide-left .5s .15s cubic-bezier(.2,.9,.2,1) both; }
+  @keyframes slash-in { from { transform: skewX(-13deg) translateY(-110%); } to { transform: skewX(-13deg); } }
+  @keyframes slam { 0% { opacity: 0; transform: skewX(-10deg) scale(1.5) translateX(-30px); } 60% { opacity: 1; } 100% { transform: skewX(-10deg) scale(1); } }
   @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-  @keyframes slide-in { from { opacity: 0; transform: translateX(-46px) skewX(6deg); } to { opacity: 1; transform: none; } }
+  @keyframes slide-in { from { opacity: 0; transform: translateX(-46px); } to { opacity: 1; transform: none; } }
   @keyframes slide-left { from { opacity: 0; transform: translateX(60px); } to { opacity: 1; transform: none; } }
-  @keyframes drop { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
-  @keyframes pulse-shadow { 0%, 100% { filter: drop-shadow(7px 7px 0 var(--hot)); } 50% { filter: drop-shadow(9px 9px 0 var(--cyan)); } }
+  @keyframes drop { from { opacity: 0; transform: skewX(-12deg) translateY(-16px); } to { opacity: 1; transform: skewX(-12deg); } }
+  @keyframes stick { from { opacity: 0; transform: rotate(-30deg) scale(1.8); } to { opacity: 1; transform: rotate(12deg); } }
+  @keyframes deal { from { opacity: 0; transform: skewX(-4deg) translateY(18px) rotate(-2deg); } to { opacity: 1; transform: skewX(-4deg); } }
+
+  /* ---------- 2XKO colours ----------
+     The front end (menu, pause, results, loading screen, map wipe) in 2XKO's own palette:
+     charcoal and grey under off-white type, one lime accent, black outlines. The tokens the
+     shared pieces read (--volt, --cyan, --hot) are remapped here; the rules below give the
+     places that need it a colour of their own. The HUD in a run keeps its colours. */
+  #menu, #pause, #results, #loading, .wipe {
+    --ink: #1B1D1F; --ink-2: #232528; --ink-3: #2E3033; --gray: #484A4B;
+    --ice: #F1F2F1; --mist: rgba(241, 242, 241, 0.62); --line: rgba(241, 242, 241, 0.14);
+    --lime: #CDF564; --volt: var(--lime); --cyan: var(--lime); --hot: var(--gray); --hot-deep: var(--ink-3);
+  }
+  .menu-bg { background: linear-gradient(90deg, rgba(27,29,31,0.97) 0%, rgba(27,29,31,0.9) 34%, rgba(27,29,31,0.3) 52%, rgba(27,29,31,0) 66%); }
+  .menu-bg .s1 { background: var(--lime); }
+  .menu-bg .s2 { background: var(--ice); }
+  .menu-bg .s3 { background: linear-gradient(180deg, var(--gray) 0%, transparent 72%); opacity: 0.8; }
+  .brand b, .logo b { background: var(--lime); color: var(--ink); }
+  .brand b { box-shadow: 3px 3px 0 var(--gray); }
+  .logo b { box-shadow: 7px 7px 0 var(--gray), 7px 7px 0 3px #000; }
+  .nav-btn { background: rgba(35,37,40,0.95); }
+  .nav-btn .idx, .tag i, .page-title i, .back::before { color: var(--lime); }
+  .sticker { background: var(--ice); }
+  .sticker b { color: var(--lime); }
+  .back:hover { background: var(--lime); color: var(--ink); }
+  .ticker i { color: var(--ink); }
+  .fighter span { -webkit-text-stroke: 2px rgba(205,245,100,0.8); text-shadow: 7px 0 0 rgba(241,242,241,0.1), 14px 0 0 rgba(72,74,75,0.4); }
+  .best, .board-card, .panel { border-left-color: var(--lime); }
+  .board-card { background: linear-gradient(160deg, rgba(46,48,51,0.94), rgba(27,29,31,0.94)); }
+  .tile:hover, .seg button:hover { background: #3a3c3f; }
+  .tile[aria-pressed="true"] { background: var(--lime); color: var(--ink); }
+  .tile[aria-pressed="true"]::after { background: var(--ink); }
+  .roster .tile[aria-pressed="true"] i { color: var(--ink); }
+  .arrow:hover { background: var(--lime); color: var(--ink); }
+  .dots i.on { background: var(--lime); }
+  .dots i.lock { background: rgba(241,242,241,0.1); }
+  .more { color: var(--lime); }
+  .more:hover { color: var(--ice); }
+  .item { cursor: pointer; box-shadow: 7px 7px 0 var(--gray), 7px 7px 0 3px #000; }
+  .item[data-state="equipped"] { box-shadow: 7px 7px 0 var(--lime), 7px 7px 0 3px #000; }
+  .item-art { border-top: 4px solid var(--item, var(--gray)); }
+  .item[data-state="equipped"]::after { background: var(--lime); color: var(--ink); }
+  .item .buy.equip { background: var(--ice); }
+  .item .buy.short { background: var(--ink-3); color: var(--mist); box-shadow: none; }
+  #loading .wordmark b { color: var(--lime); }
+
+  /* trying on: a card or design picked before it is bought */
+  .item.trying { outline: 3px solid var(--lime); outline-offset: 5px; }
+  .item.trying::before {
+    content: "Anprobe"; position: absolute; left: -10px; top: -13px; z-index: 1; padding: 3px 10px 2px; transform: rotate(-5deg);
+    background: var(--ice); color: var(--ink); border: 2px solid #000; font-weight: 700; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  .board-card.locked canvas { filter: saturate(0.55) brightness(0.85); }
+  .try-buy { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px 8px 14px; background: var(--ink-2); border: 2px solid #000; border-left: 4px solid var(--lime); }
+  .try-buy small { display: block; font-weight: 700; font-size: 0.66rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--lime); }
+  .try-buy b { font-family: var(--display); font-weight: 400; font-size: 1.15rem; letter-spacing: 0.03em; text-transform: uppercase; }
+  .buy-btn {
+    flex: none; display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 14px 5px; transform: skewX(-10deg);
+    border: 3px solid #000; background: var(--lime); color: var(--ink); box-shadow: 4px 4px 0 #000;
+    font-weight: 700; font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .buy-btn b { font-family: var(--display); font-weight: 400; font-size: 1.1rem; letter-spacing: 0.03em; }
+  .buy-btn:hover { filter: brightness(1.08); }
+  .buy-btn:active { transform: skewX(-10deg) translate(2px, 2px); box-shadow: 2px 2px 0 #000; }
+  /* not enough Flakes: the button shakes its head */
+  .nope { animation: nope .4s cubic-bezier(.3,.7,.4,1); }
+  @keyframes nope { 0%, 100% { translate: 0 0; } 20% { translate: -7px 0; } 40% { translate: 6px 0; } 60% { translate: -4px 0; } 80% { translate: 2px 0; } }
+  .toast {
+    position: absolute; left: 50%; bottom: calc(var(--foot) + 66px); z-index: 4; max-width: min(560px, calc(100vw - 40px)); box-sizing: border-box;
+    padding: 9px 20px 8px; transform: translateX(-50%) skewX(-10deg); opacity: 0; pointer-events: none; text-align: center;
+    background: var(--ice); color: var(--ink); border: 3px solid #000; box-shadow: 6px 6px 0 var(--lime), 6px 6px 0 3px #000;
+    font-weight: 700; font-size: 0.9rem; letter-spacing: 0.02em;
+  }
+  /* (shown at once, only the movement is animated: it never waits on an animation to be seen) */
+  .toast { transition: opacity .25s; }
+  .toast.show { opacity: 1; transition: none; animation: toast-in .35s cubic-bezier(.2,1.4,.3,1); }
+  @keyframes toast-in { from { translate: 0 14px; } to { translate: 0 0; } }
+
+  /* the locker's clothes: a little figure per outfit */
+  .col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  .note { margin: -2px 0 0; color: var(--mist); font-size: 0.8rem; }
+  .fits { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
+  .fit-card {
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 4px 6px;
+    background: var(--ink-3); border: 2px solid #000; transform: skewX(-6deg); overflow: hidden;
+  }
+  .fit-card > * { transform: skewX(6deg); }
+  .fit-card .fit { transform: skewX(6deg) scale(0.6); margin: -17px 0 -15px; }
+  .fit-card b { font-family: var(--display); font-weight: 400; font-size: 0.86rem; line-height: 1.1; letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap; }
+  .fit-card small { font-weight: 700; font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mist); white-space: nowrap; }
+  .fit-card:hover { background: #3a3c3f; }
+  .fit-card[aria-pressed="true"] { background: var(--lime); color: var(--ink); }
+  .fit-card[aria-pressed="true"] small { color: var(--ink); }
+  .fit-card.locked .fit { opacity: 0.6; filter: saturate(0.6); }
+  .fit-card.locked small { color: var(--lime); }
+  .fit-card.locked[aria-pressed="true"] small { color: var(--ink); }
+
+  /* the maps on Play: wide cards with the sky of each park on the right */
+  .maps { grid-template-columns: 1fr; gap: 10px; }
+  .maps .tile.map-card {
+    min-height: 76px; padding: 12px 140px 12px 20px; gap: 3px; justify-content: center;
+    background: linear-gradient(100deg, var(--ink-3) 0 66%, transparent 66.2%), var(--sky);
+  }
+  .maps .tile.map-card:hover { background: linear-gradient(100deg, #3a3c3f 0 66%, transparent 66.2%), var(--sky); }
+  .maps .tile.map-card[aria-pressed="true"] { background: linear-gradient(100deg, var(--lime) 0 66%, transparent 66.2%), var(--sky); color: var(--ink); }
+  .maps .tile.map-card[aria-pressed="true"]::after { right: 34%; }
+  .map-card[data-env="day"] { --sky: linear-gradient(180deg, #6fa8dc 0%, #dbe9f5 58%, #ffffff 100%); }
+  .map-card[data-env="sunset"] { --sky: linear-gradient(180deg, #ff9a52 0%, #c2547a 55%, #3b2a55 100%); }
+  .map-card[data-env="overcast"] { --sky: linear-gradient(180deg, #8e98a3 0%, #ccd2d8 58%, #eef1f3 100%); }
+  .map-card .map-name { font-family: var(--display); font-weight: 400; font-size: 1.7rem; line-height: 1; letter-spacing: 0.03em; }
+  .map-card small { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; opacity: 0.85; }
+  .map-card .map-best { opacity: 1; color: var(--lime); }
+  .map-card[aria-pressed="true"] .map-best { color: var(--ink); }
 
   /* tiles: light sweep on hover, flash when picked */
   .tile, .seg button, .swatch { overflow: hidden; }
@@ -320,8 +570,8 @@
   /* board art slides in from the side the arrow points */
   #boardCanvas.from-right { animation: board-r .4s cubic-bezier(.2,.9,.2,1); }
   #boardCanvas.from-left { animation: board-l .4s cubic-bezier(.2,.9,.2,1); }
-  @keyframes board-r { from { opacity: 0; transform: translateX(40px) rotate(2deg); } to { opacity: 1; transform: none; } }
-  @keyframes board-l { from { opacity: 0; transform: translateX(-40px) rotate(-2deg); } to { opacity: 1; transform: none; } }
+  @keyframes board-r { from { transform: translateX(40px) rotate(2deg); } to { transform: none; } }
+  @keyframes board-l { from { transform: translateX(-40px) rotate(-2deg); } to { transform: none; } }
 
   /* diagonal wipe while a new map is built */
   .wipe { position: fixed; inset: 0; z-index: 25; pointer-events: none; display: none; }
@@ -361,6 +611,8 @@
   .t-small b { font-size: 0.95rem; }
   .t-tail { right: calc(max(22px, env(safe-area-inset-right, 0px)) + 96px); bottom: calc(max(22px, env(safe-area-inset-bottom, 0px)) + 112px); }
   .t-nose { right: max(30px, env(safe-area-inset-right, 0px)); bottom: calc(max(22px, env(safe-area-inset-bottom, 0px)) + 128px); }
+  .t-over { right: calc(max(22px, env(safe-area-inset-right, 0px)) + 52px); bottom: calc(max(22px, env(safe-area-inset-bottom, 0px)) + 206px); background: var(--hot-deep); color: var(--ice); }
+  .t-over b { font-size: 0.8rem; }
   .t-pause {
     position: absolute; left: 50%; top: max(8px, env(safe-area-inset-top, 0px)); transform: translateX(-50%); pointer-events: auto;
     width: 44px; height: 44px; border: 2px solid rgba(244,245,251,0.5); border-radius: 50%; background: rgba(7,7,12,0.5); color: var(--ice); font-weight: 700; letter-spacing: -0.1em;
@@ -380,14 +632,26 @@
     .t-grab { width: 74px; height: 74px; right: calc(max(22px, env(safe-area-inset-right, 0px)) + 104px); }
     .t-tail { bottom: calc(max(22px, env(safe-area-inset-bottom, 0px)) + 96px); right: calc(max(22px, env(safe-area-inset-right, 0px)) + 84px); }
     .t-nose { bottom: calc(max(22px, env(safe-area-inset-bottom, 0px)) + 108px); }
+    .t-over { bottom: calc(max(22px, env(safe-area-inset-bottom, 0px)) + 178px); right: calc(max(22px, env(safe-area-inset-right, 0px)) + 44px); }
   }
 
   @media (max-width: 900px) {
-    .menu-bg { background: repeating-linear-gradient(-62deg, rgba(255,255,255,0.035) 0 2px, transparent 2px 16px), rgba(7,7,12,0.86); }
-    .menu-bg::before, .menu-bg::after, .fighter, .rider-card, .topbar { display: none; }
-    .rail { width: 100%; min-width: 0; padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-bottom: 140px; }
-    .cta { left: 0; right: 0; bottom: 0; align-items: stretch; padding: 34px max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: linear-gradient(180deg, rgba(7,7,12,0) 0%, var(--ink) 38%); }
-    .start { justify-content: space-between; padding: 12px 30px 10px 28px; }
+    #menu { --gut: max(16px, env(safe-area-inset-left, 0px)); --edge: 100%; }
+    .menu-bg { background: radial-gradient(circle, rgba(244,245,251,0.08) 1.2px, transparent 1.7px) 0 0 / 11px 11px, rgba(7,7,12,0.86); }
+    .menu-bg .dots, .menu-bg .slash, .fighter, .rider-card, .sticker { display: none; }
+    .topbar { padding-left: var(--gut); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+    .chip { padding: 4px 12px 4px 10px; }
+    .chip.who { display: none; }
+    .home .logo { top: calc(max(16px, env(safe-area-inset-top, 0px)) + 54px); font-size: clamp(2.8rem, 13vw, 4.2rem); }
+    .home-nav { left: var(--gut); right: max(24px, env(safe-area-inset-right, 0px)); top: auto; bottom: calc(var(--foot) + 56px); transform: none; gap: 14px; }
+    .nav-btn { width: auto; padding: 4px 44px 6px 16px; }
+    .nav-btn .label { font-size: clamp(2.2rem, 11vw, 3.4rem); }
+    .nav-btn[aria-current="true"] { transform: skewX(-12deg) translateX(8px); }
+    .page, .page.wide { width: 100%; min-width: 0; padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-bottom: calc(var(--foot) + 150px); }
+    .shop-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+    .cta { left: var(--gut); right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(var(--foot) + 46px); align-items: stretch; }
+    .start { justify-content: space-between; padding: 8px 30px 6px 26px; }
+    .hints { display: none; }
     .progress { width: 130px; }
   }
   @media (max-width: 480px) {
@@ -400,8 +664,39 @@
     #menu *, #menu *::before, #menu *::after, .wipe i { animation-duration: 0.01s !important; animation-delay: 0s !important; transition: none !important; }
   }
 </style>
-<script type="importmap">
-{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+<script>
+  // The import map, written as the page loads: three from the CDN and, on a local server, our
+  // own modules with this load's time on their URLs. The browser then never runs a cached old
+  // copy of one of them under a newer page (python's http.server sends no cache headers, and
+  // a half-updated game is a menu whose buttons do nothing). New files in src/ go in the list.
+  (() => {
+    const imports = {
+      three: 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js',
+      'three/addons/': 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/',
+    };
+    const local = location.protocol === 'file:' || /^(localhost|127\.|0\.0\.0\.0|\[::1\]|192\.168\.|10\.)/.test(location.hostname);
+    if (local) {
+      const v = Date.now();
+      for (const f of ['assets', 'atmosphere', 'audio', 'boards', 'course', 'effects', 'hats', 'input', 'main', 'maps', 'physics', 'post', 'rider', 'shop', 'skis', 'touch', 'trees', 'tricks', 'world']) {
+        imports[`./src/${f}.js`] = `./src/${f}.js?v=${v}`;
+      }
+    }
+    const map = document.createElement('script');
+    map.type = 'importmap';
+    map.textContent = JSON.stringify({ imports });
+    document.currentScript.after(map);
+  })();
+  // A script error shows up on screen instead of leaving a game that silently does nothing.
+  (() => {
+    const show = (msg) => {
+      const bar = document.getElementById('errbar');
+      if (!bar) return;
+      bar.hidden = false;
+      bar.querySelector('span').textContent = String(msg).slice(0, 300);
+    };
+    window.addEventListener('error', (e) => show(e.message || e.error));
+    window.addEventListener('unhandledrejection', (e) => show(e.reason?.message ?? e.reason));
+  })();
 </script>
 </head>
 <body>
@@ -432,93 +727,147 @@
   <div class="rotate-hint">Tipp: quer halten</div>
 </div>
 
-<div id="menu" class="overlay" hidden>
-  <div class="menu-bg" aria-hidden="true"></div>
-  <div class="topbar"><div class="topmeta" id="mapMeta"></div></div>
+<div id="menu" class="overlay" hidden data-screen="home">
+  <div class="menu-bg" aria-hidden="true"><i class="dots"></i><i class="slash s1"></i><i class="slash s2"></i><i class="slash s3"></i></div>
 
-  <div class="rail">
-    <header>
-      <h1 class="logo"><span>SNOW</span><b>DAY</b></h1>
-      <p class="tagline">Snowboard · Ski · Slopestyle · Backcountry</p>
-    </header>
+  <header class="topbar">
+    <div class="brand" aria-hidden="true"><span>SNOW</span><b>DAY</b></div>
+    <div class="chips">
+      <div class="chip who"><i id="chipGear">Board</i><b id="chipRider">Kai</b></div>
+      <div class="chip flakes" title="Flakes: gibt es für jeden Run, der unten ankommt"><i aria-hidden="true">❄</i><b id="flakes">0</b><span class="sr">Flakes</span></div>
+    </div>
+  </header>
 
-    <section class="block" aria-labelledby="tagMap">
-      <h2 class="tag" id="tagMap"><i>01</i><span>Strecke</span></h2>
-      <div class="tiles maps" id="maps"></div>
-    </section>
+  <section class="screen home" id="scrHome" aria-label="Hauptmenü">
+    <h1 class="logo"><span>SNOW</span><b>DAY</b></h1>
+    <nav class="home-nav" id="homeNav" aria-label="Hauptmenü">
+      <div class="nav-item"><button class="nav-btn" data-go="play" aria-current="true"><i class="idx">01</i><span class="label">Play</span><small>Park wählen · Droppen</small></button></div>
+      <div class="nav-item"><button class="nav-btn" data-go="locker" aria-current="false"><i class="idx">02</i><span class="label">Locker</span><small>Fahrer · Outfit · Board &amp; Ski</small></button></div>
+      <div class="nav-item"><button class="nav-btn" data-go="shop" aria-current="false"><i class="idx">03</i><span class="label">Shop</span><small>Neue Designs &amp; Outfits</small></button></div>
+      <div class="sticker" aria-hidden="true"><small>Season</small><b>01</b></div>
+    </nav>
+  </section>
 
-    <section class="block" aria-labelledby="tagRider">
-      <h2 class="tag" id="tagRider"><i>02</i><span>Fahrer</span></h2>
-      <div class="tiles roster" id="riders"></div>
-      <div class="swatch-row"><p class="label">Outfit</p><div class="swatches" id="outfits" role="group" aria-label="Outfit"></div></div>
-    </section>
-
-    <section class="block board-card" aria-labelledby="boardName">
-      <h2 class="tag"><i>03</i><span>Ausrüstung</span></h2>
-      <div class="seg gear-seg" id="gear" role="group" aria-label="Sportgerät">
-        <button data-g="board" aria-pressed="true">Snowboard</button>
-        <button data-g="ski" aria-pressed="false">Ski</button>
-      </div>
-      <div class="board-stage">
-        <button class="arrow" id="prevBoard" aria-label="Vorheriges Board">‹</button>
-        <canvas id="boardCanvas" width="880" height="220"></canvas>
-        <button class="arrow" id="nextBoard" aria-label="Nächstes Board">›</button>
-      </div>
-      <div class="board-info">
-        <div>
-          <h2 id="boardName">Polar Night</h2>
-          <p id="boardTag"></p>
-        </div>
-        <button class="flip-btn" id="flipBoard">Unterseite zeigen</button>
-      </div>
-      <dl class="stats" id="boardStats"></dl>
-      <div class="dots" id="boardDots"></div>
-    </section>
-
-    <section class="block" aria-labelledby="tagSetup">
-      <h2 class="tag" id="tagSetup"><i>04</i><span>Setup</span></h2>
-      <div class="setup">
-        <div>
-          <p class="label">Rail-Hilfe</p>
-          <div class="seg" id="assist">
-            <button data-a="on" aria-pressed="true">An</button>
-            <button data-a="off" aria-pressed="false">Aus</button>
+  <section class="screen page" id="scrPlay" tabindex="-1" aria-labelledby="ttlPlay" hidden>
+    <div class="page-head">
+      <button class="back" aria-label="Zurück zum Hauptmenü"><kbd class="kb-only">Esc</kbd><span>Zurück</span></button>
+      <h2 class="page-title" id="ttlPlay"><i>01</i><span>Play</span></h2>
+    </div>
+    <div class="page-body">
+      <section class="block" aria-labelledby="tagMap">
+        <h3 class="tag" id="tagMap"><i>A</i><span>Map wählen</span></h3>
+        <div class="tiles maps" id="maps"></div>
+        <div class="topmeta" id="mapMeta"></div>
+      </section>
+      <section class="block" aria-labelledby="tagSetup">
+        <h3 class="tag" id="tagSetup"><i>B</i><span>Setup</span></h3>
+        <div class="setup">
+          <div>
+            <p class="label">Rail-Hilfe</p>
+            <div class="seg" id="assist">
+              <button data-a="on" aria-pressed="true">An</button>
+              <button data-a="off" aria-pressed="false">Aus</button>
+            </div>
+          </div>
+          <div>
+            <p class="label">Tageszeit</p>
+            <div class="seg" id="daytime">
+              <button data-t="auto" aria-pressed="true">Auto</button>
+              <button data-t="morning" aria-pressed="false">Morgen</button>
+              <button data-t="noon" aria-pressed="false">Mittag</button>
+              <button data-t="evening" aria-pressed="false">Abend</button>
+              <button data-t="night" aria-pressed="false">Nacht</button>
+              <button data-t="cycle" aria-pressed="false">Zyklus</button>
+            </div>
+          </div>
+          <div>
+            <p class="label">Grafik</p>
+            <div class="seg" id="quality">
+              <button data-q="high" aria-pressed="true">Hoch</button>
+              <button data-q="medium" aria-pressed="false">Leistung</button>
+            </div>
           </div>
         </div>
-        <div>
-          <p class="label">Tageszeit</p>
-          <div class="seg" id="daytime">
-            <button data-t="auto" aria-pressed="true">Auto</button>
-            <button data-t="morning" aria-pressed="false">Morgen</button>
-            <button data-t="noon" aria-pressed="false">Mittag</button>
-            <button data-t="evening" aria-pressed="false">Abend</button>
-            <button data-t="night" aria-pressed="false">Nacht</button>
-            <button data-t="cycle" aria-pressed="false">Zyklus</button>
-          </div>
-        </div>
-        <div>
-          <p class="label">Grafik</p>
-          <div class="seg" id="quality">
-            <button data-q="high" aria-pressed="true">Hoch</button>
-            <button data-q="medium" aria-pressed="false">Leistung</button>
-          </div>
-        </div>
-      </div>
-    </section>
+      </section>
+      <details class="block">
+        <summary class="tag"><i>C</i><span>Steuerung</span></summary>
+        <div class="keys" id="keysList"></div>
+      </details>
+    </div>
+  </section>
 
-    <details class="block">
-      <summary class="tag"><i>05</i><span>Steuerung</span></summary>
-      <div class="keys" id="keysList"></div>
-    </details>
-  </div>
+  <section class="screen page wide" id="scrLocker" tabindex="-1" aria-labelledby="ttlLocker" hidden>
+    <div class="page-head">
+      <button class="back" aria-label="Zurück zum Hauptmenü"><kbd class="kb-only">Esc</kbd><span>Zurück</span></button>
+      <h2 class="page-title" id="ttlLocker"><i>02</i><span>Locker</span></h2>
+    </div>
+    <div class="page-body">
+      <div class="col">
+        <section class="block" aria-labelledby="tagRider">
+          <h3 class="tag" id="tagRider"><i>A</i><span>Fahrer</span></h3>
+          <div class="tiles roster" id="riders"></div>
+        </section>
+        <section class="block" aria-labelledby="tagFit">
+          <h3 class="tag" id="tagFit"><i>B</i><span>Kleidung</span></h3>
+          <p class="note">Jacke, Hose, Helm, Handschuhe und Goggles: anklicken zum Anziehen.</p>
+          <div class="fits" id="outfits" role="group" aria-label="Kleidung"></div>
+          <div class="try-buy" id="outfitBuy" hidden><span><small>Anprobe</small><b id="outfitLock"></b></span><button class="buy-btn" id="buyOutfit"></button></div>
+        </section>
+      </div>
+      <section class="block board-card" aria-labelledby="boardName">
+        <h3 class="tag"><i>C</i><span>Board &amp; Ski</span></h3>
+        <div class="seg gear-seg" id="gear" role="group" aria-label="Sportgerät">
+          <button data-g="board" aria-pressed="true">Snowboard</button>
+          <button data-g="ski" aria-pressed="false">Ski</button>
+        </div>
+        <div class="board-stage">
+          <button class="arrow" id="prevBoard" aria-label="Vorheriges Design">‹</button>
+          <canvas id="boardCanvas" width="880" height="220"></canvas>
+          <button class="arrow" id="nextBoard" aria-label="Nächstes Design">›</button>
+        </div>
+        <div class="board-info">
+          <div>
+            <h2 id="boardName">Polar Night</h2>
+            <p id="boardTag"></p>
+          </div>
+          <button class="flip-btn" id="flipBoard">Unterseite zeigen</button>
+        </div>
+        <div class="try-buy" id="designBuy" hidden><span><small>Anprobe</small><b>Noch nicht gekauft</b></span><button class="buy-btn" id="buyDesign"></button></div>
+        <dl class="stats" id="boardStats"></dl>
+        <div class="dots" id="boardDots"></div>
+        <button class="more" id="toShop">Mehr Designs im Shop ›</button>
+      </section>
+    </div>
+  </section>
+
+  <section class="screen page wide" id="scrShop" tabindex="-1" aria-labelledby="ttlShop" hidden>
+    <div class="page-head">
+      <button class="back" aria-label="Zurück zum Hauptmenü"><kbd class="kb-only">Esc</kbd><span>Zurück</span></button>
+      <h2 class="page-title" id="ttlShop"><i>03</i><span>Shop</span></h2>
+    </div>
+    <div class="page-body">
+      <div class="shop-bar">
+        <div class="seg" id="shopTabs" role="group" aria-label="Kategorie">
+          <button data-tab="designs" aria-pressed="true">Board &amp; Ski</button>
+          <button data-tab="outfits" aria-pressed="false">Outfits</button>
+        </div>
+        <p class="shop-note">❄ Flakes gibt es für jeden Run, der unten ankommt: 25 plus 1 je 100 Punkte.</p>
+      </div>
+      <div class="shop-grid" id="shopGrid"></div>
+    </div>
+  </section>
 
   <div class="fighter" aria-hidden="true"><span id="riderBig">KAI</span></div>
   <div class="rider-card" aria-hidden="true"><b id="riderName">Kai</b><small id="riderOutfit">Signal</small></div>
 
-  <div class="cta">
+  <div class="cta" id="playCta" hidden>
     <div class="best" id="menuBest"></div>
-    <div class="start-wrap"><button class="start" id="startBtn"><span>Run starten</span><small>Enter drücken</small></button></div>
+    <div class="start-wrap"><button class="start" id="startBtn"><span>Drop in</span><small class="kb-only">Enter</small></button></div>
   </div>
+
+  <div class="hints kb-only" id="menuHints" aria-hidden="true"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="ticker" aria-hidden="true"><div><span>Snowday</span><i>✦</i><span>Drop in</span><i>✦</i><span>Stomp it</span><i>✦</i><span>Double Cork 1260</span><i>✦</i><span>Misty 720</span><i>✦</i><span>Rodeo 540</span><i>✦</i><span>Send it</span><i>✦</i><span>Snowday</span><i>✦</i><span>Drop in</span><i>✦</i><span>Stomp it</span><i>✦</i><span>Double Cork 1260</span><i>✦</i><span>Misty 720</span><i>✦</i><span>Rodeo 540</span><i>✦</i><span>Send it</span><i>✦</i></div></div>
 </div>
 
 <div class="wipe" id="wipe" aria-hidden="true"><i></i><i></i><i><b id="wipeName"></b></i></div>
@@ -538,6 +887,7 @@
   <div class="panel">
     <p class="label">Run beendet</p>
     <div><span class="big" id="resScore">0</span><span id="resBest"></span></div>
+    <div class="earned" id="resFlakes"></div>
     <div class="facts">
       <div><b id="resTime">0:00</b><span>Zeit</span></div>
       <div><b id="resTricks">0</b><span>Tricks</span></div>
@@ -561,6 +911,7 @@
   </div>
 </div>
 
-<script type="module" src="src/main.js"></script>
+<div class="errbar" id="errbar" role="alert" hidden><b>Fehler im Spiel</b><span></span><small>Bitte mit Strg+Shift+R neu laden; bleibt er, diesen Text weitergeben.</small></div>
+<script type="module">import './src/main.js';</script>
 </body>
 </html>

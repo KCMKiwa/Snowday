@@ -62,7 +62,9 @@ float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float h31(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
 float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
-float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 6; i++){ s += a * vnoise(p); p = mat2(1.6, 1.2, -1.2, 1.6) * p + 7.3; a *= 0.5; } return s; }
+// octaves set by the graphics quality (the cloud layer is the sky's main cost)
+uniform int uOct;
+float fbm(vec2 p, int oct){ float a = 0.5, s = 0.0; for (int i = 0; i < 6; i++){ if (i >= oct) break; s += a * vnoise(p); p = mat2(1.6, 1.2, -1.2, 1.6) * p + 7.3; a *= 0.5; } return s; }
 void main(){
   vec3 v = normalize(vDir);
   float vy = max(v.y, 0.0);
@@ -79,8 +81,8 @@ void main(){
   float cloud = 0.0;
   if (uCover > 0.0 && v.y > 0.0) {
     vec2 p = v.xz / (v.y + 0.07) * 0.55 + vec2(uTime * 0.004, uTime * 0.0013);
-    vec2 w = vec2(fbm(p * 0.6), fbm(p * 0.6 + 5.2));
-    float n = fbm(p * 1.15 + w * 1.6);
+    vec2 w = vec2(fbm(p * 0.6, uOct - 2), fbm(p * 0.6 + 5.2, uOct - 2));
+    float n = fbm(p * 1.15 + w * 1.6, uOct);
     cloud = smoothstep(1.0 - uCover - 0.02, 1.0 - uCover + 0.32, n) * smoothstep(0.0, 0.1, v.y);
     float thick = smoothstep(0.4, 1.0, n);
     vec3 key = uDay > 0.001 ? uSunCol : uMoonCol;
@@ -164,6 +166,7 @@ export class Atmosphere {
       uTauR: { value: new THREE.Vector3(...TAU_R) }, uTauM: { value: 0.07 },
       uSunCol: { value: new THREE.Vector3() }, uMoonCol: { value: new THREE.Vector3() }, uAmb: { value: new THREE.Vector3() },
       uFog: { value: new THREE.Vector3() }, uDay: { value: 1 }, uNight: { value: 0 }, uCover: { value: 0.3 }, uTime: { value: 0 }, uScale: { value: SKY_SCALE }, uSunCloud: { value: 0 },
+      uOct: { value: 5 },
     };
     const sky = new THREE.Mesh(new THREE.SphereGeometry(4000, 48, 24), new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false, uniforms: this.uniforms, vertexShader: SKY_VERT, fragmentShader: SKY_FRAG,
@@ -191,7 +194,8 @@ export class Atmosphere {
 
     this.buildMist();
     this.lamps = [];
-    // a fixed pool of spot lights (a fixed light count keeps every material compiled once)
+    // a fixed pool of spot lights, only in the scene while the lamps are on (warmLights
+    // compiles the materials for both cases up front, so dusk does not stutter)
     this.spots = [];
     for (let i = 0; i < 6; i++) {
       const s = new THREE.SpotLight(0xfff1dd, 0, 70, 0.95, 0.65, 2);
@@ -220,8 +224,10 @@ export class Atmosphere {
     this.hours = TIME_PRESETS[preset] ?? (preset === 'cycle' ? this.hours : mapDefault ?? TIME_PRESETS.noon);
   }
 
+  // Graphics quality: shadow map sizes, the far cascade, cloud detail.
   setShadowQuality(high) {
-    this.near.shadow.mapSize.set(high ? 4096 : 1024, high ? 4096 : 1024);
+    this.near.shadow.mapSize.set(high ? 2048 : 1024, high ? 2048 : 1024);
+    this.uniforms.uOct.value = high ? 5 : 3;
     this.far.castShadow = high;
     for (const l of [this.near, this.far]) if (l.shadow.map) { l.shadow.map.dispose(); l.shadow.map = null; }
   }
@@ -398,8 +404,22 @@ export class Atmosphere {
     this.mistReady = true;
   }
 
+  // Compile every material with and without the floodlights, while the loading screen is up.
+  warmLights(renderer, scene, camera) {
+    const was = this.spots.map((s) => s.visible);
+    for (const s of this.spots) s.visible = true;
+    renderer.compile(scene, camera);
+    this.spots.forEach((s, i) => { s.visible = was[i]; });
+    renderer.compile(scene, camera);
+  }
+
+  // Lights that are off are taken out of the scene: three.js compiles every light that is
+  // in it into every lit material, so six dark spot lights would still cost every pixel.
   updateLamps(focus, on) {
-    if (!this.lamps.length || !focus) { for (const s of this.spots) s.intensity = 0; return; }
+    const lit = on > 0.01 && this.lamps.length > 0 && !!focus;
+    for (const s of this.spots) s.visible = lit;
+    for (const l of this.lamps) { l.glow.visible = lit; l.cone.visible = lit; }
+    if (!lit) { for (const l of this.lamps) l.bulb.material.emissiveIntensity = 0; return; }
     // the pooled spot lights go to the lamps nearest the rider
     const near = [...this.lamps].sort((a, b) => a.head.distanceToSquared(focus) - b.head.distanceToSquared(focus)).slice(0, this.spots.length);
     this.spots.forEach((s, i) => {
@@ -451,6 +471,7 @@ export class Atmosphere {
       cone.position.copy(head);
       // aim into the run, at the snow a few metres in
       const aim = new THREE.Vector3(x - side * 13, course.heightAtD(x - side * 13, d), -d);
+      bulb.userData.keep = cone.userData.keep = true; // updated per frame: not merged into the static batches
       root.add(pole, arm, bulb, glow, cone);
       lamps.push({ head, aim, glow, cone, bulb });
     }

@@ -128,9 +128,10 @@ export function firShapes() {
   return shapes;
 }
 
-// Add instanced firs for a list of [x, y, z, height, rotY] at the given detail.
-export function addFirs(root, items, lod, { shadows = true } = {}) {
-  const S = firShapes();
+// Add instanced firs for a list of [x, y, z, height, rotY] at the given detail; returns the meshes.
+export function addFirs(root, items, lod, { shadows = true, shapes = 4, trunks = true } = {}) {
+  const out = [];
+  const S = firShapes().slice(0, shapes);
   const groups = S.map(() => []);
   items.forEach((it, i) => groups[i % S.length].push(it));
   const dummy = new THREE.Object3D();
@@ -138,19 +139,26 @@ export function addFirs(root, items, lod, { shadows = true } = {}) {
     if (!list.length) return;
     const shape = S[si];
     const crown = new THREE.InstancedMesh(lod ? shape.far : shape.near, shape.mats.needles, list.length);
-    const trunk = new THREE.InstancedMesh(shape.trunk, shape.mats.bark, list.length);
+    const trunk = trunks ? new THREE.InstancedMesh(shape.trunk, shape.mats.bark, list.length) : null;
     list.forEach(([x, y, z, h, rot, lean], i) => {
       dummy.position.set(x, y, z);
       dummy.rotation.set(lean ?? 0, rot, 0);
       dummy.scale.set(h * (0.9 + (i % 5) * 0.05), h, h * (0.9 + (i % 3) * 0.06));
       dummy.updateMatrix();
       crown.setMatrixAt(i, dummy.matrix);
-      trunk.setMatrixAt(i, dummy.matrix);
+      trunk?.setMatrixAt(i, dummy.matrix);
     });
     crown.customDepthMaterial = shape.mats.depth;
-    crown.castShadow = shadows; trunk.castShadow = shadows;
-    crown.receiveShadow = true; trunk.receiveShadow = true;
-    crown.computeBoundingSphere(); trunk.computeBoundingSphere();
-    root.add(crown, trunk);
+    crown.castShadow = shadows; crown.receiveShadow = true;
+    crown.computeBoundingSphere();
+    root.add(crown);
+    out.push(crown);
+    if (trunk) {
+      trunk.castShadow = shadows; trunk.receiveShadow = true;
+      trunk.computeBoundingSphere();
+      root.add(trunk);
+      out.push(trunk);
+    }
   });
+  return out;
 }

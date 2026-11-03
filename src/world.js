@@ -4,6 +4,8 @@
 // switch can throw it away.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { SimplifyModifier } from 'three/addons/modifiers/SimplifyModifier.js';
 import { ENVS } from './maps.js';
 import { addFirs } from './trees.js';
 import { Atmosphere } from './atmosphere.js';
@@ -195,68 +197,89 @@ float snowHash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(
   return mat;
 }
 
+// The ridden terrain in 55 m chunks, each built twice: full detail (0.55 m) for near the
+// camera, and a coarse version (2.2 m, about an eighth of the triangles) for the distance,
+// with a short skirt hanging down at its ends so no crack opens against a detailed neighbour.
 function buildTerrain(course, root, sunDir, shade) {
   const xs = columnXs(course);
-  const nx = xs.length;
+  const coarse = [];
+  for (const x of xs) if (!coarse.length || x - coarse[coarse.length - 1] >= 1.95 || x === xs[xs.length - 1]) coarse.push(x);
   const mat = snowMaterial(snowNormalMap(), sunDir, shade);
-  const step = 0.55;
   const chunkLen = 55;
-  const gh = course.groomHalf;
   for (let d0 = course.startD; d0 < course.endD; d0 += chunkLen) {
-    const rows = Math.round(chunkLen / step) + 1;
-    const pos = new Float32Array(nx * rows * 3);
-    const col = new Float32Array(nx * rows * 3);
-    const uv = new Float32Array(nx * rows * 2);
-    const groom = new Float32Array(nx * rows);
-    // heights first (with a margin), so occlusion can look at the neighbours
-    const M = 4, hRows = rows + 2 * M;
-    const H = new Float32Array(hRows * nx);
-    for (let j = 0; j < hRows; j++) for (let i = 0; i < nx; i++) H[j * nx + i] = course.heightAtD(xs[i], d0 + (j - M) * step);
-    const hAt = (j, i) => H[(j + M) * nx + Math.min(nx - 1, Math.max(0, i))];
-    for (let j = 0; j < rows; j++) {
-      const d = d0 + j * step;
-      for (let i = 0; i < nx; i++) {
-        const x = xs[i];
-        const y = hAt(j, i);
-        const k = j * nx + i;
-        pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = -d;
-        uv[k * 2] = x * 0.22; uv[k * 2 + 1] = d * 0.22;
-        const g = gh > 0 ? 1 - Math.min(1, Math.max(0, (Math.abs(x) - gh + 1.5) / 3)) : 0;
-        groom[k] = d > course.startD + 60 && d < course.finishD + course.runout ? g : g * 0.4;
-        // occlusion: dips, kicker bases and landings collect less sky light
-        const di = Math.max(1, Math.round(2 / Math.max(0.5, Math.abs((xs[Math.min(nx - 1, i + 1)] - xs[Math.max(0, i - 1)]) / 2))));
-        const avg = (hAt(j - 4, i) + hAt(j + 4, i) + hAt(j, i - di) + hAt(j, i + di)) * 0.25;
-        const cav = avg - y;
-        const ao = 1 - Math.min(0.22, Math.max(0, cav) * 0.5) + Math.min(0.04, Math.max(0, -cav) * 0.15);
-        // snow is never pure white: slightly off-white, with large soft patches
-        const patch = 1 + 0.035 * Math.sin(x * 0.045 + d * 0.06) * Math.sin(d * 0.023 - x * 0.07) + 0.02 * Math.sin(d * 0.21 + x * 0.17);
-        const off = 1 - g;
-        const v = 0.93 * ao * patch * (1 - off * (0.04 + 0.03 * Math.sin(x * 0.7 + d * 0.3)));
-        col[k * 3] = v * (0.985 - off * 0.04);
-        col[k * 3 + 1] = v * (0.99 - off * 0.015);
-        col[k * 3 + 2] = v;
-      }
-    }
-    const idx = [];
-    for (let j = 0; j < rows - 1; j++) {
-      for (let i = 0; i < nx - 1; i++) {
-        const a = j * nx + i, b = a + 1, c = a + nx, e = c + 1;
-        idx.push(a, b, c, b, e, c);
-      }
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-    g.setAttribute('aGroom', new THREE.BufferAttribute(groom, 1));
-    g.setIndex(idx);
-    g.computeVertexNormals();
-    g.computeBoundingSphere();
-    const m = new THREE.Mesh(g, mat);
-    m.receiveShadow = true;
-    root.add(m);
+    const fine = new THREE.Mesh(terrainChunk(course, xs, d0, chunkLen, 0.55, false), mat);
+    const far = new THREE.Mesh(terrainChunk(course, coarse, d0, chunkLen, 2.2, true), mat);
+    fine.receiveShadow = far.receiveShadow = true;
+    far.visible = false;
+    root.add(fine, far);
+    lodEntry('ground', [fine], [far]);
   }
   buildFarTerrain(course, root, mat);
+}
+
+function terrainChunk(course, xs, d0, chunkLen, step, skirt) {
+  const nx = xs.length;
+  const gh = course.groomHalf;
+  const rows = Math.round(chunkLen / step) + 1;
+  // Row list: [height row j, drop below the surface, connected to the next row?]. A skirt is
+  // a copy of an end row (own vertices, so the surface normals stay clean) and the same row
+  // 1.5 m lower, joined into a curtain.
+  const list = [];
+  if (skirt) list.push([0, 1.5, true], [0, 0, false]);
+  for (let j = 0; j < rows; j++) list.push([j, 0, j < rows - 1]);
+  if (skirt) { list[list.length - 1][2] = false; list.push([rows - 1, 0, true], [rows - 1, 1.5, false]); }
+  const all = list.length;
+  const pos = new Float32Array(nx * all * 3);
+  const col = new Float32Array(nx * all * 3);
+  const uv = new Float32Array(nx * all * 2);
+  const groom = new Float32Array(nx * all);
+  // heights first (with a margin of ~2.2 m), so occlusion can look at the neighbours
+  const ao = Math.max(1, Math.round(2.2 / step)), M = ao, hRows = rows + 2 * M;
+  const H = new Float32Array(hRows * nx);
+  for (let j = 0; j < hRows; j++) for (let i = 0; i < nx; i++) H[j * nx + i] = course.heightAtD(xs[i], d0 + (j - M) * step);
+  const hAt = (j, i) => H[(j + M) * nx + Math.min(nx - 1, Math.max(0, i))];
+  for (let r = 0; r < all; r++) {
+    const [j, drop] = list[r];
+    const d = d0 + j * step;
+    for (let i = 0; i < nx; i++) {
+      const x = xs[i];
+      const y = hAt(j, i) - drop;
+      const k = r * nx + i;
+      pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = -d;
+      uv[k * 2] = x * 0.22; uv[k * 2 + 1] = d * 0.22;
+      const g = gh > 0 ? 1 - Math.min(1, Math.max(0, (Math.abs(x) - gh + 1.5) / 3)) : 0;
+      groom[k] = d > course.startD + 60 && d < course.finishD + course.runout ? g : g * 0.4;
+      // occlusion: dips, kicker bases and landings collect less sky light
+      const di = Math.max(1, Math.round(2 / Math.max(0.5, Math.abs((xs[Math.min(nx - 1, i + 1)] - xs[Math.max(0, i - 1)]) / 2))));
+      const avg = (hAt(j - ao, i) + hAt(j + ao, i) + hAt(j, i - di) + hAt(j, i + di)) * 0.25;
+      const cav = avg - hAt(j, i);
+      const occ = 1 - Math.min(0.22, Math.max(0, cav) * 0.5) + Math.min(0.04, Math.max(0, -cav) * 0.15);
+      // snow is never pure white: slightly off-white, with large soft patches
+      const patch = 1 + 0.035 * Math.sin(x * 0.045 + d * 0.06) * Math.sin(d * 0.023 - x * 0.07) + 0.02 * Math.sin(d * 0.21 + x * 0.17);
+      const off = 1 - g;
+      const v = 0.93 * occ * patch * (1 - off * (0.04 + 0.03 * Math.sin(x * 0.7 + d * 0.3)));
+      col[k * 3] = v * (0.985 - off * 0.04);
+      col[k * 3 + 1] = v * (0.99 - off * 0.015);
+      col[k * 3 + 2] = v;
+    }
+  }
+  const idx = [];
+  for (let j = 0; j < all - 1; j++) {
+    if (!list[j][2]) continue;
+    for (let i = 0; i < nx - 1; i++) {
+      const a = j * nx + i, b = a + 1, c = a + nx, e = c + 1;
+      idx.push(a, b, c, b, e, c);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('aGroom', new THREE.BufferAttribute(groom, 1));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  g.computeBoundingSphere();
+  return g;
 }
 
 // Beyond the ridden terrain the valley carries on as a coarse mesh and climbs into a head
@@ -484,16 +507,132 @@ function modelParts(root) {
   return { parts, size: box.getSize(new THREE.Vector3()), box };
 }
 
-// Draw one model many times: list of matrices -> one InstancedMesh per part.
-function instance(root, model, matrices, { shadow = true, matFor = (m) => m } = {}) {
+// Boulders and stumps stand in their hundreds along the valley: a lighter copy of the scan
+// (keep: the share of its vertices left, made once and kept for every map) looks the same
+// at their size and saves a few hundred thousand triangles a frame.
+const lighterScans = new WeakMap();
+function lighterParts(root, keep) {
+  if (!root) return null;
+  if (!lighterScans.has(root)) {
+    const model = modelParts(root);
+    const simplify = new SimplifyModifier();
+    // (three r160's simplifier reads vertex colours with a global THREE.Color it never
+    // imports: lend it one for the call, the scans' colours hold their shading)
+    const lent = !globalThis.THREE;
+    if (lent) globalThis.THREE = { Color: THREE.Color };
+    for (const p of model.parts) {
+      const n = p.geometry.attributes.position.count;
+      try { p.geometry = simplify.modify(p.geometry, Math.floor(n * (1 - keep))); } catch { /* the full scan then */ }
+    }
+    if (lent) delete globalThis.THREE;
+    lighterScans.set(root, model);
+  }
+  return lighterScans.get(root);
+}
+
+// ---------- level of detail ----------
+// Everything drawn many times is split into stretches along the valley, so the camera and
+// the shadow cameras skip what they cannot see (one instanced mesh for the whole valley can
+// never be culled, and was drawn in full into every shadow map each frame). Each stretch
+// also switches detail, hides itself in the distance and only casts shadows near the
+// camera (update(), every frame).
+const STRETCH = 80;
+// distances (m) from the camera to the edge of a stretch
+const RANGE = {
+  ground: { lod: 115, hide: Infinity, shadow: -1 }, // terrain chunks (never cast)
+  tree: { lod: 135, hide: 1500, shadow: 90 }, // firs: full detail near, light far
+  prop: { hide: 230, shadow: 55 }, // boulders, stumps: small, gone in the haze
+  cliff: { hide: 1500, shadow: 110 },
+};
+let LOD = null;
+function byStretch(items, zOf, len = STRETCH) {
+  const groups = new Map();
+  for (const it of items) {
+    const k = Math.floor(-zOf(it) / len);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(it);
+  }
+  return [...groups.values()];
+}
+// bounds of a set of meshes (world space: the world root sits at the origin)
+function lodEntry(kind, meshes, far = []) {
+  const box = new THREE.Box3(), b = new THREE.Box3();
+  for (const m of [...meshes, ...far]) {
+    if (m.isInstancedMesh) m.computeBoundingBox();
+    else m.geometry.computeBoundingBox();
+    b.copy(m.isInstancedMesh ? m.boundingBox : m.geometry.boundingBox);
+    box.union(b);
+  }
+  for (const m of [...meshes, ...far]) m.userData.lod = true;
+  const center = box.getCenter(new THREE.Vector3());
+  LOD?.push({ kind, near: meshes, far, center, radius: box.getSize(new THREE.Vector3()).length() / 2, state: '' });
+}
+function updateLod(list, cam) {
+  for (const e of list) {
+    const d = Math.max(0, cam.distanceTo(e.center) - e.radius);
+    const r = RANGE[e.kind];
+    const near = r.lod ? d < r.lod : d < r.hide, far = r.lod ? d >= r.lod && d < r.hide : false, shadow = d < r.shadow;
+    const state = `${near}${far}${shadow}`;
+    if (state === e.state) continue;
+    e.state = state;
+    for (const m of e.near) { m.visible = near; m.castShadow = shadow; }
+    for (const m of e.far) { m.visible = far; m.castShadow = shadow; }
+  }
+}
+
+// Static meshes that share a material (posts, rails, signs, props, cabins, poles) are merged
+// per stretch of valley into one mesh each: hundreds of tiny draw calls become a few dozen.
+// Left alone: instanced and level-of-detail meshes, multi-material meshes, and anything
+// marked userData.keep (changed at run time).
+function batchStatic(root) {
+  root.updateMatrixWorld(true);
+  const groups = new Map(), at = new THREE.Vector3();
+  root.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || o.userData.keep || o.userData.lod || Array.isArray(o.material) || !o.visible) return;
+    // (a mirrored mesh would come out inside out once baked)
+    if (o.matrixWorld.determinant() < 0) return;
+    const g = o.geometry;
+    if (g.morphAttributes && Object.keys(g.morphAttributes).length) return;
+    const sig = Object.keys(g.attributes).sort().map((k) => k + g.attributes[k].itemSize + (g.attributes[k].normalized ? 'n' : '')).join(',') + (g.index ? ':i' : ':n');
+    const stretch = Math.floor(-o.getWorldPosition(at).z / 120);
+    const key = `${o.material.uuid}|${sig}|${o.castShadow}|${o.receiveShadow}|${o.renderOrder}|${o.frustumCulled}|${stretch}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(o);
+  });
+  for (const list of groups.values()) {
+    if (list.length < 2) continue;
+    const geos = list.map((o) => {
+      const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
+      // mergeGeometries needs plain float arrays of the same kind
+      for (const k of Object.keys(g.attributes)) if (g.attributes[k].isInterleavedBufferAttribute) g.setAttribute(k, g.attributes[k].clone());
+      return g;
+    });
+    const merged = mergeGeometries(geos, false);
+    for (const g of geos) g.dispose();
+    if (!merged) continue;
+    merged.computeBoundingSphere();
+    const m = new THREE.Mesh(merged, list[0].material);
+    m.castShadow = list[0].castShadow; m.receiveShadow = list[0].receiveShadow;
+    m.renderOrder = list[0].renderOrder; m.frustumCulled = list[0].frustumCulled;
+    root.add(m);
+    for (const o of list) o.removeFromParent();
+  }
+}
+
+// Draw one model many times: list of matrices -> instanced meshes per part and stretch.
+function instance(root, model, matrices, { shadow = true, matFor = (m) => m, kind = 'prop' } = {}) {
   if (!model || !matrices.length) return;
-  for (const p of model.parts) {
-    const mesh = new THREE.InstancedMesh(p.geometry, matFor(p.material), matrices.length);
-    matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
-    mesh.computeBoundingSphere();
-    mesh.castShadow = shadow;
-    mesh.receiveShadow = true;
-    root.add(mesh);
+  for (const list of byStretch(matrices, (m) => m.elements[14])) {
+    const meshes = model.parts.map((p) => {
+      const mesh = new THREE.InstancedMesh(p.geometry, matFor(p.material), list.length);
+      list.forEach((m, i) => mesh.setMatrixAt(i, m));
+      mesh.computeBoundingSphere();
+      mesh.castShadow = shadow;
+      mesh.receiveShadow = true;
+      root.add(mesh);
+      return mesh;
+    });
+    lodEntry(kind, meshes);
   }
 }
 
@@ -537,8 +676,13 @@ function buildTrees(course, root) {
       (Math.abs(x) < course.parkHalf + 45 ? near : far).push(it);
     }
   }
-  addFirs(root, near, 0, { shadows: true });
-  addFirs(root, far, 1, { shadows: true });
+  firStretches(root, [...near, ...far]);
+}
+
+// Firs per stretch of valley, each stretch at both levels of detail (picked by distance).
+function firStretches(root, items) {
+  // two crown shapes per stretch (instances vary by size and turn), no trunks in the distance
+  for (const list of byStretch(items, (it) => it[2], 120)) lodEntry('tree', addFirs(root, list, 0, { shapes: 2 }), addFirs(root, list, 1, { shapes: 2, trunks: false }));
 }
 
 // ---------- rocks & obstacles ----------
@@ -559,9 +703,9 @@ function fallbackRock() {
 function buildRocks(course, root, props) {
   const mats = new Map();
   const matFor = (m) => { if (!mats.has(m)) mats.set(m, snowify(m, 0.75)); return mats.get(m); };
-  const rock = modelParts(props.rockScan) || fallbackRock();
+  const rock = lighterParts(props.rockScan, 0.35) || fallbackRock();
   const cliffs = [props.cliffA, props.cliffB].map(modelParts).filter(Boolean);
-  const stump = modelParts(props.stumpScan);
+  const stump = lighterParts(props.stumpScan, 0.4);
   const ph = course.parkHalf;
   const span = course.endD - course.startD;
 
@@ -595,7 +739,7 @@ function buildRocks(course, root, props) {
       // face the outcrop down the valley wall, towards the run
       lists[i % cliffs.length].push(matrixAt(x, course.heightAtD(x, d) - s * 0.6, -d, (side > 0 ? -Math.PI / 2 : Math.PI / 2) + (rnd() - 0.5) * 0.8, s));
     }
-    cliffs.forEach((c, i) => instance(root, c, lists[i], { matFor }));
+    cliffs.forEach((c, i) => instance(root, c, lists[i], { matFor, kind: 'cliff' }));
   }
 
   // stumps along the tree lines (and in the backcountry riding area)
@@ -614,7 +758,7 @@ function buildRocks(course, root, props) {
 
   // firs standing in the backcountry riding area (also obstacles)
   const trees = course.obstacles.filter((o) => o.type === 'tree');
-  addFirs(root, trees.map((o) => [o.x, o.y - 0.3, -o.d, o.h, rnd() * Math.PI * 2, 0]), 0);
+  firStretches(root, trees.map((o) => [o.x, o.y - 0.3, -o.d, o.h, rnd() * Math.PI * 2, 0]));
 }
 
 // ---------- props, camps, lodge ----------
@@ -1035,6 +1179,7 @@ export function buildWorld(scene, course, props = {}, atmo) {
   const env = ENVS[course.map.env] ?? ENVS.day;
   const root = new THREE.Group();
   root.name = 'world';
+  const lod = LOD = [];
 
   buildMountains(root, course, env);
   buildTerrain(course, root, atmo.lightDir, atmo.shade);
@@ -1049,14 +1194,19 @@ export function buildWorld(scene, course, props = {}, atmo) {
   buildGate(course, root, 2, course.map.gate ?? 'SNOWDAY', '#ff2d78');
   buildGate(course, root, course.finishD, 'FINISH', '#12121c');
   const lamps = Atmosphere.buildPoles(course, root);
+  batchStatic(root);
   scene.add(root);
+
+  LOD = null;
 
   return {
     env, lamps,
+    // distance-based detail, culling and shadow casting, from the camera position
+    update(cam) { updateLod(lod, cam); },
     dispose() {
       scene.remove(root);
       // geometries are rebuilt per map; materials of loaded models are shared and stay
-      root.traverse((o) => { if (o.geometry && !o.userData.shared) o.geometry.dispose(); });
+      root.traverse((o) => { if (o.isInstancedMesh) o.dispose(); if (o.geometry && !o.userData.shared) o.geometry.dispose(); });
     },
   };
 }
